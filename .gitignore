@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+wikipedia.parquet
+.env
+
+# Derived data artifacts (regenerable; sources/ is ~255MB)
+sources/
+generated/
+logs/
+reports/*.png

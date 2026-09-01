@@ -1,0 +1,271 @@
+# ============================================================================
+# Sinhala Human-AI Boundary-Detection Dataset - master configuration
+# All tunable knobs live here. Code must contain no magic numbers.
+# ============================================================================
+
+seed: 42
+
+paths:
+  raw_parquet: wikipedia.parquet
+  sources: sources/human_sources.jsonl
+  generated_dir: generated
+  logs_dir: logs
+  splits_dir: splits
+  reports_dir: reports
+  prompts: prompts/task2_prompts.yaml
+
+# --- Column mapping (discovered by inspect_data.py; adapt here, not in code) --
+schema:
+  id_col: id
+  title_col: title
+  url_col: url
+  # Cleaning source. `raw_mediawiki` is authoritative: the shipped `text`
+  # column still leaks Category: lines, {{#ifexpr}} and __NOTOC__ residue.
+  text_col: raw_mediawiki
+
+# ---------------------------------------------------------------- cleaning ---
+clean:
+  # Namespace prefixes to drop (English + Sinhala). Applied to `title`.
+  drop_title_prefixes:
+    - "Talk:"
+    - "User:"
+    - "User talk:"
+    - "Wikipedia:"
+    - "WP:"
+    - "WT:"
+    - "File:"
+    - "Image:"
+    - "MediaWiki:"
+    - "Template:"
+    - "Help:"
+    - "Category:"
+    - "Portal:"
+    - "Draft:"
+    - "Book:"
+    - "Module:"
+    - "Special:"
+    - "සාකච්ඡාව:"
+    - "සාමාජික:"
+    - "විකිපීඩියා:"
+    - "ගොනුව:"
+    - "ගොනු:"
+    - "රූපය:"
+    - "සැකිල්ල:"
+    - "උදවු:"
+    - "ප්‍රවර්ගය:"
+    - "ද්වාරය:"
+    - "මොඩියුලය:"
+    - "විශේෂ:"
+  # Exact titles to drop (main page and equivalents).
+  drop_exact_titles:
+    - "මුල් පිටුව"
+    - "Main Page"
+  # Page-type regexes tested against RAW wikitext.
+  redirect_patterns:
+    - '(?i)^\s*#\s*(?:REDIRECT|redirect)'
+    - '^\s*#\s*යළි[\s\-]*යොමු'
+  disambiguation_patterns:
+    - 'බහුරුත්හරණය'
+    - '(?i)\{\{\s*disambig'
+    - '(?i)\{\{\s*(?:hndis|geodis|surname|given name)\s*[\|\}]'
+  stub_patterns:
+    - 'දියුණු\s*කරන්න'
+    - '(?i)\{\{[^}]{0,40}stub\s*\}\}'
+  # List pages: title-based and content-based (mostly bullets).
+  list_title_patterns:
+    - 'ලැයිස්තුව'
+    - '(?i)^List of\b'
+    - '(?i)^Index of\b'
+  # If bullet/# lines exceed this fraction of non-blank lines -> list page.
+  max_bullet_line_ratio: 0.35
+  # --- prose gate (applied AFTER markup strip) ---
+  min_sentences: 8
+  min_words: 120
+  min_chars: 400
+  # Reject if Sinhala-script share of letters falls below this.
+  min_sinhala_char_ratio: 0.55
+  # Drop cleaned paragraphs shorter than this (caption/heading residue).
+  min_paragraph_chars: 60
+
+# ----------------------------------------------------------- segmentation ---
+segment:
+  terminators: [".", "?", "!", "෴", "…"]   # . ? ! kunddaliya ellipsis
+  # Tokens that end in '.' but do not end a sentence.
+  abbreviations:
+    - "ආචාර්ය"
+    - "මහාචාර්ය"
+    - "පූජ්‍ය"
+    - "ශ්‍රී"
+    - "මයා"
+    - "මිය"
+    - "අංක"
+    - "ක්‍රි.ව"
+    - "ක්‍රි.පූ"
+    - "ඉ.පෙ"
+    - "පි.ව"
+    - "Dr"
+    - "Mr"
+    - "Mrs"
+    - "Ms"
+    - "Prof"
+    - "St"
+    - "Jr"
+    - "Sr"
+    - "vs"
+    - "etc"
+    - "No"
+    - "Fig"
+    - "Vol"
+    - "pp"
+    - "ed"
+    - "eds"
+    - "cf"
+    - "al"
+  min_sentence_chars: 15   # shorter fragments get merged into the previous one
+
+# --------------------------------------------------------------- windowing ---
+window:
+  min_sentences: 6
+  max_sentences: 12
+  # Windows per source article (contiguous, non-overlapping).
+  max_windows_per_source: 1
+  min_words: 100
+
+# ------------------------------------------------------------------ splits ---
+split:
+  train: 0.70
+  dev: 0.15
+  test: 0.15
+
+# ------------------------------------------------------------- generators ---
+# Prices are USD per token, verified live against /api/v1/models on
+# 2026-09-01. openrouter.py re-verifies at runtime and warns on drift.
+generators:
+  deepseek_v3:
+    slug: deepseek/deepseek-chat
+    role: seen
+    splits: [train, dev, test]
+    temperature: 0.8
+    top_p: 0.95
+    max_tokens: 1200
+    price_prompt: 0.0000002574
+    price_completion: 0.0000010287
+    reasoning: null
+  mistral_nemo:
+    slug: mistralai/mistral-nemo
+    role: seen
+    splits: [train, dev, test]
+    temperature: 0.8
+    top_p: 0.95
+    max_tokens: 1200
+    price_prompt: 0.000000019
+    price_completion: 0.00000003
+    reasoning: null
+  gemini_2_5_pro:
+    slug: google/gemini-2.5-pro
+    role: held_out
+    splits: [dev, test]          # held out of train by design
+    temperature: 0.8
+    top_p: 0.95
+    max_tokens: 1200
+    price_prompt: 0.00000125
+    price_completion: 0.00001
+    # Reasoning model: keep traces out of the stored text entirely.
+    reasoning:
+      effort: minimal
+      exclude: true
+
+# ------------------------------------------------------------ API client ---
+api:
+  base_url: https://openrouter.ai/api/v1
+  endpoint: /chat/completions
+  models_endpoint: /models
+  api_key_env: OPENROUTER_API_KEY
+  timeout_seconds: 120
+  max_retries: 5
+  backoff_base_seconds: 2.0
+  backoff_max_seconds: 60.0
+  concurrency: 8
+  # Politeness delay between request starts, seconds.
+  min_request_interval: 0.15
+  referer: https://github.com/sinhala-boundary-detection
+  title: Sinhala Boundary Detection Dataset
+
+# ------------------------------------------------------------ constructions ---
+constructions:
+  type1_single_boundary:
+    enabled: true
+    min_sentences: 4
+    boundary_low: 0.20      # split point sampled uniformly in [low, high]
+    boundary_high: 0.80
+    min_human_sentences: 2
+    min_ai_sentences: 2
+  type2_single_internal_segment:
+    enabled: true
+    min_sentences: 6
+    span_min_sentences: 1
+    span_max_sentences: 3
+    ai_ratio_min: 0.15
+    ai_ratio_max: 0.35
+    min_context_sentences: 2   # preferred human sentences each side
+  type3_multiple_internal_segments:
+    enabled: true
+    min_sentences: 8
+    num_spans_min: 2
+    num_spans_max: 3
+    span_min_sentences: 1
+    span_max_sentences: 2
+    min_gap_sentences: 1       # >=1 human sentence between spans
+    ai_ratio_max: 0.45
+
+# ------------------------------------------------------------- validation ---
+validate:
+  max_retries: 3
+  length_tolerance: 0.25          # +/-25% of target word count
+  sentence_count_tolerance: 0     # exact match required
+  min_sinhala_char_ratio: 0.60
+  max_latin_char_ratio: 0.25
+  preamble_patterns:
+    - '(?i)^\s*(?:sure|certainly|of course|okay|ok)\b'
+    - '(?i)^\s*here(?:''s| is)\b'
+    - '(?i)^\s*(?:as requested|i have|i''ve|below is)'
+    - '(?i)^\s*(?:rewritten|continuation|translation|output|response)\s*:'
+    - '^\s*මෙන්න'
+    - '^\s*මෙහි\s+(?:දැක්වෙන|ඇත්තේ)'
+    - '^\s*පහත\s+දැක්වෙන'
+  markdown_patterns:
+    - '(?m)^\s{0,3}#{1,6}\s'
+    - '\*\*[^*]+\*\*'
+    - '(?m)^\s{0,3}[-*+]\s+'
+    - '(?m)^\s{0,3}\d+[.)]\s+'
+    - '```'
+    - '(?m)^\s*>\s'
+    - '\[[^\]]+\]\([^)]+\)'
+  # Exact-copy check: normalised similarity above this = rejected as a copy.
+  max_copy_similarity: 0.92
+
+# ------------------------------------------------------------------ pilot ---
+pilot:
+  docs_per_generator: 50
+  # Mix across constructions, must sum to docs_per_generator.
+  type_mix:
+    type1_single_boundary: 20
+    type2_single_internal_segment: 15
+    type3_multiple_internal_segments: 15
+  splits: [train, dev, test]
+
+# ------------------------------------------------- full run target sizes ---
+full_run:
+  docs_per_generator:
+    deepseek_v3: 2000
+    mistral_nemo: 2000
+    gemini_2_5_pro: 600
+  type_mix_ratio:
+    type1_single_boundary: 0.40
+    type2_single_internal_segment: 0.30
+    type3_multiple_internal_segments: 0.30
+
+domains:
+  wikipedia:
+    enabled: true
+    prompt_family: wikipedia
