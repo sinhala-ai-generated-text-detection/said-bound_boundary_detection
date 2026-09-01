@@ -437,21 +437,6 @@ consequence of the 20–80% sampling rule and the constraint that spans cannot
 touch the first or last sentence. **This is measurable and a detector can
 exploit it**, which is why a position-only baseline is reported in §12.
 
-### Cost
-
-Total spend across all runs (pilot + comparison + 20% slice): **$5.60** for
-2,393 API calls, 3.38 M input and 0.58 M output tokens.
-
-| generator | calls | spend |
-|---|---|---|
-| deepseek_v3 | 1,003 | $0.72 |
-| gpt_4o | 905 | $3.67 |
-| gemini_2_5_pro | 344 | $1.18 |
-| mistral_nemo (rejected) | 141 | $0.02 |
-
-The 20% generation slice alone took 43 minutes at concurrency 8. Full-run
-projection: ~$27 total, ~9–10 hours.
-
 ---
 
 ## 11. Cross-model comparison
@@ -765,51 +750,3 @@ directly, as a comparison point against the fine-tuned encoder — and as a chec
 on whether the task is solvable without task-specific training data.
 
 ---
-
-## 16. Reproduction
-
-```bash
-python -m venv .venv && .venv/Scripts/pip install -r requirements.txt
-# torch: pip install torch --index-url https://download.pytorch.org/whl/cu124
-
-python src/inspect_data.py                 # profile the parquet
-python src/clean.py                        # filter cascade -> sources/
-python -m pytest tests/ -q                 # 111 tests
-python src/window.py                       # contiguous windows
-python src/split.py                        # 70/15/15 over source IDs
-
-python src/generate.py --mode pilot                    # small pilot
-python src/generate.py --mode full --fraction 0.2      # nested slice
-python src/build_dataset.py --strict                   # assemble + verify
-python src/audit.py                                    # balance + plots
-
-python src/detect/run_experiments.py                   # baselines + linear
-python src/detect/run_transformer.py --epochs 12 --lr 3e-5 --grad-accum 1
-```
-
-`--dry-run` exercises the full pipeline with zero API calls. All stages are
-resumable: completed records are skipped, so re-runs extend rather than
-regenerate.
-
-### Artifacts
-
-| path | contents |
-|---|---|
-| `generated/combined.jsonl` | the dataset, one JSON record per document |
-| `splits/{train,dev,test}_source_ids.txt` | split assignment |
-| `logs/{generations,rejected,cost}.jsonl` | every call, rejection and cost |
-| `reports/pilot_report.md` | pilot gate: pass rates, examples, fluency |
-| `reports/model_comparison.md` | matched same-span cross-model comparison |
-| `reports/audit.md` | balance and boundary-position distributions |
-| `reports/detector_report.md` | baselines and linear models |
-| `reports/transformer_report.md` | XLM-R results |
-| `reports/evidence/` | Mistral Nemo rejection evidence |
-
-Each dataset record carries: `record_id, source_id, window_id, title, url,
-domain, generator, generator_slug, generator_role, construction_type, split,
-text, sentences[], labels[], boundaries[], boundary_position_normalized,
-ai_sentence_ratio, spans, boundary_index, prompt_id, raw_output,
-cleaned_output, temperature, top_p, retry_count, validation_passed,
-validation_errors[], n_sentences, n_words, generated_at`.
-
-Seed 42 throughout.
