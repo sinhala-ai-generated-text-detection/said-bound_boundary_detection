@@ -6,3 +6,5 @@ matplotlib==3.10.6
 tqdm==4.67.1
 pytest==8.4.2
 scikit-learn==1.7.2
+torch==2.6.0+cu124  # install: pip install torch --index-url https://download.pytorch.org/whl/cu124
+transformers==5.16.1
