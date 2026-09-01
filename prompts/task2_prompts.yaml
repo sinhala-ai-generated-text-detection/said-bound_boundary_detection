@@ -1,0 +1,158 @@
+# ============================================================================
+# Task-2 prompt templates: one family per domain x primitive.
+#
+# Primitives (only two):
+#   single_boundary_prefix  -> Type 1 (human prefix, AI continuation)
+#   span_replacement        -> Types 2 and 3 (rewrite a marked span in place)
+#   single_boundary_reverse -> optional variant (AI prefix, human suffix)
+#
+# Instructions are written in Sinhala because the task is Sinhala generation,
+# followed by a compact English constraint block. The English block is
+# deliberate: Mistral Nemo (12B) follows format constraints far less reliably
+# from Sinhala-only instructions, and format violations are what the validator
+# rejects. The *output* language constraint is stated in both languages.
+#
+# Placeholders are Python str.format fields. Every template must consume only
+# the fields listed under `fields:` - generate.py asserts this.
+# ============================================================================
+
+version: 1
+
+wikipedia:
+
+  # ---------------------------------------------------------------- Type 1 --
+  single_boundary_prefix:
+    prompt_id: wiki_single_boundary_prefix_v1
+    fields: [title, prefix, target_sentence_count, target_word_count, target_word_min, target_word_max]
+    system: |
+      ඔබ සිංහල විශ්වකෝෂ ලේඛකයෙකි. ඔබ ලියන්නේ විකිපීඩියා ලිපියක ශෛලියෙන්,
+      තොරතුරු සහිතව හා නිරවද්‍යව ය.
+
+      නීති:
+      - සිංහල භාෂාවෙන් පමණක් ලියන්න.
+      - ලකුණු කිරීම් (markdown), ශීර්ෂ, ලැයිස්තු හෝ අංක යෙදූ තිත් භාවිත නොකරන්න.
+      - හඳුන්වාදීමක්, පෙරවදනක් හෝ අවසන් සාරාංශයක් ලියන්න එපා.
+      - ඉල්ලූ පෙළ පමණක් ලබා දෙන්න.
+      - තහවුරු කළ නොහැකි නිශ්චිත කරුණු (නම්, දින, සංඛ්‍යා) නිර්මාණය නොකරන්න.
+
+      RULES (must follow exactly):
+      - Write ONLY in Sinhala script.
+      - No markdown, no headings, no bullet or numbered lists, no bold.
+      - No preamble such as "Sure", "Here is", "මෙන්න". No closing remark.
+      - Output ONLY the requested continuation text, nothing else.
+      - Do not invent unverifiable specifics (names, dates, numbers).
+    user: |
+      පහත දැක්වෙන්නේ "{title}" නම් විකිපීඩියා ලිපියක ආරම්භක කොටසයි.
+
+      ---
+      {prefix}
+      ---
+
+      මෙම කොටස ස්වාභාවිකව හා අඛණ්ඩව දිගටම ලියන්න.
+
+      අවශ්‍යතා:
+      - වාක්‍ය {target_sentence_count} ක් ලියන්න (හරියටම).
+      - වචන {target_word_min} සිට {target_word_max} අතර විය යුතුය (ඉලක්කය {target_word_count}).
+      - කෙටියේ නොලියන්න; ඉල්ලු වචන ගණන සපරන්න.
+      - ඉහත පෙළේ ශෛලිය හා තොරතුරු ප්‍රවාහය දිගටම පවත්වා ගන්න.
+      - ඉහත පෙළේ වාක්‍ය නැවත ලියන්න එපා.
+
+      Write exactly {target_sentence_count} Sinhala sentences.
+      LENGTH IS A HARD REQUIREMENT: between {target_word_min} and
+      {target_word_max} words (aim for {target_word_count}). Do not write less.
+      Output only the continuation.
+
+  # ------------------------------------------------------- Types 2 and 3 ----
+  span_replacement:
+    prompt_id: wiki_span_replacement_v1
+    fields: [title, left, target, right, target_sentence_count, target_word_count, target_word_min, target_word_max]
+    system: |
+      ඔබ සිංහල විශ්වකෝෂ සංස්කාරකවරයෙකි. ඔබට ලබා දෙන කොටස නැවත ලියා,
+      එහි ඇති සියලු කරුණු නොවෙනස්ව තබා ගනිමින් වචන වෙනස් කරන්න.
+
+      නීති:
+      - සිංහල භාෂාවෙන් පමණක් ලියන්න.
+      - ලකුණු කිරීම් (markdown), ශීර්ෂ හෝ ලැයිස්තු භාවිත නොකරන්න.
+      - හඳුන්වාදීමක් හෝ පැහැදිලි කිරීමක් ලියන්න එපා.
+      - නැවත ලියූ කොටස පමණක් ලබා දෙන්න.
+      - නම්, දින, සංඛ්‍යා හා ප්‍රමාණ හරියටම එලෙසම තබා ගන්න. ඒවා වෙනස් නොකරන්න.
+      - නව කරුණු එකතු නොකරන්න; ඇති කරුණු ඉවත් නොකරන්න.
+
+      RULES (must follow exactly):
+      - Write ONLY in Sinhala script.
+      - No markdown, headings, lists, or bold.
+      - No preamble, no explanation, no quotes around the output.
+      - Output ONLY the rewritten TARGET section.
+      - Preserve every fact exactly: names, dates, numbers, quantities must be
+        reproduced unchanged. Do not add or remove facts.
+    user: |
+      මෙය "{title}" නම් විකිපීඩියා ලිපියෙන් උපුටා ගත් කොටසකි.
+
+      පෙර සන්දර්භය (LEFT — නැවත නොලියන්න, පිටපත් නොකරන්න):
+      ---
+      {left}
+      ---
+
+      නැවත ලිවිය යුතු කොටස (TARGET):
+      ---
+      {target}
+      ---
+
+      පසු සන්දර්භය (RIGHT — නැවත නොලියන්න, පිටපත් නොකරන්න):
+      ---
+      {right}
+      ---
+
+      TARGET කොටස පමණක් නැවත ලියන්න.
+
+      අවශ්‍යතා:
+      - වාක්‍ය {target_sentence_count} ක් ලියන්න (හරියටම).
+      - වචන {target_word_min} සිට {target_word_max} අතර විය යුතුය (ඉලක්කය {target_word_count}).
+      - කෙටියේ නොලියන්න; ඉල්ලු වචන ගණන සපරන්න.
+      - TARGET හි ඇති සියලු කරුණු (නම්, දින, සංඛ්‍යා) නොවෙනස්ව තබා ගන්න.
+      - LEFT සහ RIGHT කොටස් භාවිත කරන්නේ ගැළපීම සඳහා පමණි; ඒවා පිටපත් නොකරන්න.
+      - TARGET හි වචන එලෙසම නැවත භාවිත නොකර, වෙනස් ලෙස ප්‍රකාශ කරන්න.
+
+      Rewrite ONLY the TARGET span in exactly {target_sentence_count} Sinhala
+      sentences.
+      LENGTH IS A HARD REQUIREMENT: between {target_word_min} and
+      {target_word_max} words (aim for {target_word_count}). Do not write less.
+      Keep all facts identical. Do not copy LEFT or RIGHT.
+      Output only the rewritten TARGET.
+
+  # --------------------------------------------- optional Type 1 variant ----
+  single_boundary_reverse:
+    prompt_id: wiki_single_boundary_reverse_v1
+    fields: [title, suffix, target_sentence_count, target_word_count, target_word_min, target_word_max]
+    system: |
+      ඔබ සිංහල විශ්වකෝෂ ලේඛකයෙකි. ඔබ ලියන්නේ විකිපීඩියා ලිපියක ශෛලියෙන් ය.
+
+      නීති:
+      - සිංහල භාෂාවෙන් පමණක් ලියන්න.
+      - ලකුණු කිරීම් (markdown), ශීර්ෂ හෝ ලැයිස්තු භාවිත නොකරන්න.
+      - හඳුන්වාදීමක් හෝ පෙරවදනක් ලියන්න එපා.
+      - ඉල්ලූ පෙළ පමණක් ලබා දෙන්න.
+      - තහවුරු කළ නොහැකි නිශ්චිත කරුණු නිර්මාණය නොකරන්න.
+
+      RULES (must follow exactly):
+      - Write ONLY in Sinhala script.
+      - No markdown, headings, or lists. No preamble.
+      - Output ONLY the requested opening text.
+      - Do not invent unverifiable specifics.
+    user: |
+      පහත දැක්වෙන්නේ "{title}" නම් විකිපීඩියා ලිපියක අවසාන කොටසයි.
+
+      ---
+      {suffix}
+      ---
+
+      මෙම කොටසට ස්වාභාවිකව ගැළපෙන ආරම්භක කොටස ලියන්න.
+
+      අවශ්‍යතා:
+      - වාක්‍ය {target_sentence_count} ක් ලියන්න (හරියටම).
+      - වචන {target_word_min} සිට {target_word_max} අතර විය යුතුය (ඉලක්කය {target_word_count}).
+      - කෙටියේ නොලියන්න; ඉල්ලු වචන ගණන සපරන්න.
+      - පහත පෙළේ වාක්‍ය නැවත ලියන්න එපා.
+
+      Write exactly {target_sentence_count} Sinhala sentences, between
+      {target_word_min} and {target_word_max} words. Output only the opening text.
