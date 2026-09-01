@@ -327,14 +327,25 @@ class Generator:
 
         return None, raw, cleaned, self.max_retries, errors
 
+    def plan_for(self, window: dict, ctype: str, gen_name: str) -> dict | None:
+        """The plan this (window, type, generator) would use. Deterministic."""
+        rng = random.Random(
+            f"{self.cfg['seed']}:{window['window_id']}:{ctype}:{gen_name}")
+        return PLANNERS[ctype](window, self.cfg, rng)
+
     def generate_record(self, window: dict, ctype: str, gen_name: str,
-                        split: str) -> dict | None:
-        """Build one dataset record, or None if it could not be validated."""
+                        split: str, plan: dict | None = None) -> dict | None:
+        """Build one dataset record, or None if it could not be validated.
+
+        `plan` may be supplied to force a specific span selection. Normally the
+        plan is derived per generator, but a matched cross-model comparison
+        needs every model to rewrite the *same* span.
+        """
         cfg = self.cfg
         domain = window["domain"]
-        rng = random.Random(f"{cfg['seed']}:{window['window_id']}:{ctype}:{gen_name}")
 
-        plan = PLANNERS[ctype](window, cfg, rng)
+        if plan is None:
+            plan = self.plan_for(window, ctype, gen_name)
         if plan is None:
             self._bump("skipped_ineligible")
             return None
