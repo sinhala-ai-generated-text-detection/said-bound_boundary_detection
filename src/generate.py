@@ -512,8 +512,42 @@ def build_tasks(cfg: dict, windows: list[dict], split_map: dict[str, str],
     return tasks
 
 
+def select_fraction(tasks: list[tuple], fraction: float, seed: int) -> list[tuple]:
+    """Take a deterministic, representative prefix of the full task list.
+
+    The full list is always built first and then shuffled with a fixed seed, so
+    the order does not depend on `fraction`. A 20%% run is therefore exactly the
+    first 20%% of the 100%% run: finishing the rest later resumes and extends the
+    same dataset instead of picking different windows and colliding.
+
+    Shuffling before slicing is what keeps the subset representative - the
+    unshuffled list is grouped by generator, so a raw prefix would be one model.
+    """
+    if fraction >= 1.0:
+        return tasks
+    ordered = list(tasks)
+    random.Random(f"{seed}:task-order").shuffle(ordered)
+    return ordered[:int(round(len(ordered) * fraction))]
+
+
+def describe_tasks(tasks: list[tuple], cfg: dict, label: str) -> None:
+    from collections import Counter
+    by_gen: Counter = Counter(t[2] for t in tasks)
+    by_type: Counter = Counter(t[1] for t in tasks)
+    by_split: Counter = Counter(t[3] for t in tasks)
+    print(f"\n{label}: {len(tasks)} tasks")
+    print("  by generator: " + "  ".join(
+        f"{k}={v}" for k, v in sorted(by_gen.items())))
+    print("  by type:      " + "  ".join(
+        f"{k.replace('_single','').replace('_multiple','')}={v}"
+        for k, v in sorted(by_type.items())))
+    print("  by split:     " + "  ".join(
+        f"{k}={by_split.get(k,0)}" for k in ("train", "dev", "test")))
+
+
 def run(cfg: dict, *, mode: str = "pilot", dry_run: bool = False,
-        generators: list[str] | None = None, limit: int | None = None) -> dict:
+        generators: list[str] | None = None, limit: int | None = None,
+        fraction: float = 1.0) -> dict:
     force_utf8_stdout()
     t0 = time.time()
 
@@ -554,10 +588,15 @@ def run(cfg: dict, *, mode: str = "pilot", dry_run: bool = False,
         tasks = build_tasks(cfg, windows, split_map, per_gen, type_mix,
                             gen_names, rng, splits_filter)
     else:
+        # Always build the FULL list, then slice. Keeps partial runs nested.
         for g in gen_names:
             n = per_gen_map[g]
             mix = {t: int(round(n * r)) for t, r in ratio.items()}
             tasks += build_tasks(cfg, windows, split_map, n, mix, [g], rng, None)
+        if fraction < 1.0:
+            describe_tasks(tasks, cfg, "FULL plan")
+            tasks = select_fraction(tasks, fraction, cfg["seed"])
+            describe_tasks(tasks, cfg, f"SELECTED {fraction:.0%} of full plan")
 
     done = completed_ids(cfg)
     pending = []
@@ -639,9 +678,15 @@ def main() -> None:
                     help="exercise the full pipeline with zero API calls")
     ap.add_argument("--generators", nargs="*", default=None)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--fraction", type=float, default=1.0,
+                    help="run this fraction of the full plan (e.g. 0.2). The "
+                         "subset is a deterministic prefix, so finishing the "
+                         "rest later resumes and extends the same dataset.")
     a = ap.parse_args()
+    if not 0 < a.fraction <= 1.0:
+        raise SystemExit("--fraction must be in (0, 1]")
     run(load_config(a.config), mode=a.mode, dry_run=a.dry_run,
-        generators=a.generators, limit=a.limit)
+        generators=a.generators, limit=a.limit, fraction=a.fraction)
 
 
 if __name__ == "__main__":
