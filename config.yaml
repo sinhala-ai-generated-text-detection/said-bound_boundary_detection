@@ -151,15 +151,18 @@ generators:
     price_prompt: 0.0000002574
     price_completion: 0.0000010287
     reasoning: null
-  mistral_nemo:
-    slug: mistralai/mistral-nemo
+  # Replaced mistralai/mistral-nemo after the pilot: its Sinhala was
+  # degenerate word-salad that also leaked prompt instructions into the output
+  # text. See reports/pilot_report.md and reports/evidence/.
+  gpt_4o:
+    slug: openai/gpt-4o-2024-11-20     # dated slug pinned for reproducibility
     role: seen
     splits: [train, dev, test]
     temperature: 0.8
     top_p: 0.95
     max_tokens: 1200
-    price_prompt: 0.000000019
-    price_completion: 0.00000003
+    price_prompt: 0.0000025
+    price_completion: 0.00001
     reasoning: null
   gemini_2_5_pro:
     slug: google/gemini-2.5-pro
@@ -258,7 +261,7 @@ pilot:
 full_run:
   docs_per_generator:
     deepseek_v3: 2000
-    mistral_nemo: 2000
+    gpt_4o: 2000
     gemini_2_5_pro: 600
   type_mix_ratio:
     type1_single_boundary: 0.40
