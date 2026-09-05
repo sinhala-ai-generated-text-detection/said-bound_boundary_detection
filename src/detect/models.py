@@ -111,7 +111,8 @@ class LinearDetector:
     """
 
     def __init__(self, *, ngram=(2, 4), min_df=2, max_features=200_000,
-                 C=1.0, context=0, use_position=False, seed=42):
+                 C=1.0, context=0, use_position=False, seed=42,
+                 feat_map=None, text=True):
         self.ngram = ngram
         self.min_df = min_df
         self.max_features = max_features
@@ -119,17 +120,31 @@ class LinearDetector:
         self.context = context
         self.use_position = use_position
         self.seed = seed
+        # Optional masked-LM likelihood features, keyed by record_id.
+        self.feat_map = feat_map or {}
+        # text=False gives a likelihood-only detector: it reads no characters
+        # at all, which isolates how much of the task the LM signal alone
+        # solves.
+        self.text = text
+        self.feat_dim = (len(next(iter(self.feat_map.values()))[0])
+                         if self.feat_map else 0)
+        self._mu = None
+        self._sd = None
         self.vec = None
         self.ctx_vec = None
         self.clf = None
 
     @property
     def name(self) -> str:
+        if not self.text:
+            return f"likelihood only (C={self.C})"
         bits = [f"char{self.ngram[0]}-{self.ngram[1]}", f"C={self.C}"]
         if self.context:
             bits.append(f"ctx={self.context}")
         if self.use_position:
             bits.append("pos")
+        if self.feat_map:
+            bits.append("likelihood")
         return "linear (" + ", ".join(bits) + ")"
 
     # -- feature construction ------------------------------------------
@@ -154,8 +169,28 @@ class LinearDetector:
                                     if j != si))
         return out
 
+    def _likelihood_block(self, docs, fit: bool):
+        rows = []
+        for d in docs:
+            f = self.feat_map.get(d.record_id)
+            for i in range(d.n):
+                rows.append(list(f[i]) if f and i < len(f)
+                            else [0.0] * self.feat_dim)
+        arr = np.asarray(rows, dtype=float)
+        if fit:
+            self._mu = arr.mean(0)
+            sd = arr.std(0)
+            sd[sd < 1e-6] = 1.0
+            self._sd = sd
+        return csr_matrix((arr - self._mu) / self._sd)
+
     def _matrix(self, docs, fit: bool):
         S, P = self._flat(docs)
+        if not self.text:
+            blocks = [self._likelihood_block(docs, fit)]
+            if self.use_position:
+                blocks.append(csr_matrix(np.array(P).reshape(-1, 1)))
+            return hstack(blocks).tocsr() if len(blocks) > 1 else blocks[0]
         if fit:
             self.vec = TfidfVectorizer(
                 analyzer="char_wb", ngram_range=self.ngram,
@@ -177,6 +212,9 @@ class LinearDetector:
             else:
                 Xc = self.ctx_vec.transform(Cs)
             blocks.append(Xc)
+
+        if self.feat_map:
+            blocks.append(self._likelihood_block(docs, fit))
 
         if self.use_position:
             blocks.append(csr_matrix(np.array(P).reshape(-1, 1)))

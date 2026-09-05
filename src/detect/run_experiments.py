@@ -71,6 +71,14 @@ def main() -> None:
 
     cfg = load_config(a.config)
     rm = role_map(cfg)
+    feat_map = {}
+    try:
+        from likelihood import load_features
+        feat_map = load_features()
+    except Exception:
+        pass
+    if feat_map:
+        print(f"likelihood features available for {len(feat_map)} documents")
     ds = load_dataset(cfg)
     describe(ds, cfg, "full dataset")
 
@@ -118,6 +126,15 @@ def main() -> None:
         ("text + context + smoothing", {**best, "context": 1}, 2),
         ("text + position (diagnostic)", {**best, "use_position": True}, 0),
     ]
+    if feat_map:
+        # Two extra rows: likelihood on its own reads no characters at all, so
+        # it isolates how much of the task the LM signal solves by itself.
+        variants += [
+            ("likelihood only (no text)",
+             {**best, "feat_map": feat_map, "text": False}, 0),
+            ("text + context + likelihood",
+             {**best, "context": 1, "feat_map": feat_map}, 0),
+        ]
     for label, kwargs, smooth in variants:
         m = LinearDetector(seed=cfg["seed"], **kwargs).fit(train.docs)
         r = slice_report(m, test, rm, smooth=smooth)
