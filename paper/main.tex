@@ -44,7 +44,7 @@ Dataset Construction and Preliminary Boundary Detection Results}
 \maketitle
 
 \begin{abstract}
-Large language models can now generate fluent Sinhala text, yet Sinhala, a low-resource language with more than sixteen million speakers, has no public dataset or detector for identifying machine-generated text, while online tools that rewrite such text to evade detection are already available. We present the first benchmark for detecting AI-generated Sinhala text. It comprises a multi-domain parallel corpus for document level human versus machine classification, spanning news, Wikipedia, and social media, and a companion dataset for boundary detection, the task of locating the point in a document where authorship changes from human to machine. Human text is drawn from sources predating the public release of ChatGPT, and each item is paired with machine counterparts from three language models, one of which is held out for cross-model evaluation. We document a reproducible construction pipeline and a cross-model and cross-domain evaluation protocol. On a preliminary slice of the boundary-detection data, a fine-tuned XLM-RoBERTa tagger reaches 0.51 exact-boundary F1, well above position and linear baselines, but its accuracy falls on the held-out generator, and internal rewriting proves substantially harder to detect than continuation. To our knowledge this is the first documented dataset and methodology for detecting AI-generated Sinhala text.
+Large language models can now generate fluent Sinhala text, yet Sinhala, a low-resource language with more than sixteen million speakers, has no public dataset or detector for identifying machine-generated text, while online tools that rewrite such text to evade detection are already available. We present the first benchmark for detecting AI-generated Sinhala text. It comprises a multi-domain parallel corpus for document level human versus machine classification, spanning news, Wikipedia, and social media, and a companion dataset for boundary detection, the task of locating the point in a document where authorship changes from human to machine. Human text is drawn from sources predating the public release of ChatGPT, and each item is paired with machine counterparts from three language models, one of which is held out for cross-model evaluation. We document a reproducible construction pipeline and a cross-model and cross-domain evaluation protocol. On the boundary-detection data, a fine-tuned XLM-RoBERTa tagger reaches 0.60 exact-boundary F1 and 0.80 machine-class F1, well above linear and position baselines, but its accuracy falls on the held-out generator, and internal rewriting proves substantially harder to detect than continuation. To our knowledge this is the first documented dataset and methodology for detecting AI-generated Sinhala text.
 \end{abstract}
 
 \section{Introduction}
@@ -53,7 +53,7 @@ The automatic detection of machine-generated text has become an active area of r
 
 Sinhala has so far fallen outside this effort. Although it is spoken by more than sixteen million people, it remains a low-resource, morphologically rich language with no annotated corpora and no standard tooling for detecting AI-generated text. It is currently unknown whether any detector, whether general-purpose or Sinhala-specific, can reliably separate human-written Sinhala from its machine-generated counterpart. The need is concrete rather than hypothetical, as education, journalism, and social media in Sri Lanka operate substantially in Sinhala, and online tools that rewrite AI-generated Sinhala to evade detection are already publicly available. The closest regional precedent, the DravidianLangTech shared task on Tamil and Malayalam \citep{kodali-etal-2025-bytesizedllm, barua-etal-2025-cuet}, addresses a comparable setting but does not cover Sinhala.
 
-We address this gap by building the first benchmark for detecting AI-generated Sinhala text, and we study two tasks. The first is document-level binary classification, distinguishing human-written from machine-generated text across news, Wikipedia, and social media. The second is boundary detection, locating the sentence at which a document changes from human to machine authorship, which is the harder problem of localizing a stylistic discontinuity inside largely human text. For both tasks we construct parallel data in which human text is paired with machine text from three language models under controlled prompting, adapting the multi-generator and multi-domain design of M4, M4GT-Bench, and MAGE \citep{wang-etal-2024-m4, wang-etal-2024-m4gt, li-etal-2024-mage} to a single low-resource language. We document a reproducible construction pipeline and an evaluation protocol that reports generalization to a held-out generator and a held-out domain rather than a single pooled score. As an initial technical validation, we report preliminary boundary-detection results on a first slice of the corpus. They show that the task is feasible in Sinhala but far from solved, that generalization to an unseen generator is materially harder, and that internal rewriting is much harder to detect than a trailing machine continuation.
+We address this gap by building the first benchmark for detecting AI-generated Sinhala text, and we study two tasks. The first is document-level binary classification, distinguishing human-written from machine-generated text across news, Wikipedia, and social media. The second is boundary detection, locating the sentence at which a document changes from human to machine authorship, which is the harder problem of localizing a stylistic discontinuity inside largely human text. For both tasks we construct parallel data in which human text is paired with machine text from three language models under controlled prompting, adapting the multi-generator and multi-domain design of M4, M4GT-Bench, and MAGE \citep{wang-etal-2024-m4, wang-etal-2024-m4gt, li-etal-2024-mage} to a single low-resource language. We document a reproducible construction pipeline and an evaluation protocol that reports generalization to a held-out generator and a held-out domain rather than a single pooled score. We report boundary-detection results on the completed Wikipedia portion of the corpus. They show that the task is feasible in Sinhala but far from solved, that generalization to an unseen generator is materially harder, and that internal rewriting is much harder to detect than a trailing machine continuation.
 
 The remainder of the paper is organized as follows. Section~\ref{sec:data} describes the construction of both datasets. Section~\ref{sec:binary} presents the binary classification setup, and Section~\ref{sec:boundary} the boundary detection experiments and results. Section~\ref{sec:conclusion} concludes.
 
@@ -111,9 +111,9 @@ SinhalaBERTo     & -- & -- & -- \\
 
 \paragraph{Task.} Given a document segmented into sentences, the task is to label each sentence as human- or machine-written and thereby locate the boundaries at which authorship changes, where a boundary lies between two adjacent sentences with differing labels. Boundaries are always \emph{derived} from the label sequence rather than stored separately, so generation, assembly, and evaluation share one definition by construction.
 
-\paragraph{Data.} The results below use a preliminary 20\% slice of the planned corpus: 854 documents, 7{,}935 labelled sentences, and 798 source articles, of which 35.8\% of sentences are machine-written. Documents contain 8 to 11 sentences at the quartiles (median 9). Table~\ref{tab:boundary-data} gives the composition. The held-out generator is absent from training by construction, and no source article appears in more than one partition; both invariants are verified on the built dataset.
+\paragraph{Data.} The boundary-detection corpus contains 4{,}244 documents, 39{,}358 labelled sentences, and 2{,}630 source articles, of which 36.4\% of sentences are machine-written. Table~\ref{tab:boundary-data} gives the composition. The held-out generator is absent from training by construction, and no source article appears in more than one partition; both invariants are verified on the built dataset.
 
-Construction types are close to balanced: continuation 313 documents (mean 1.00 boundaries, 49.1\% machine sentences), single-span 285 (2.00 boundaries, 24.6\%), and multi-span 256 (5.01 boundaries, 33.2\%). Figure~\ref{fig:positions} shows where boundaries fall.
+Construction types are close to balanced: continuation 1{,}675 documents (mean 1.00 boundaries), single-span 1{,}367 (2.00 boundaries), and multi-span 1{,}202 (5.01 boundaries). Figure~\ref{fig:positions} shows where boundaries fall.
 
 \paragraph{Setup.} We train on the training split, which contains only the seen generators, and select the model and decision threshold on development data \emph{restricted to seen generators}, so that the held-out generator does not influence model selection. This restriction matters: the held-out generator is present in development as well as test, and tuning on all of development would select hyperparameters using the very generator whose novelty is then reported. We then report on test, overall and separately for seen and held-out generators.
 
@@ -121,19 +121,19 @@ Construction types are close to balanced: continuation 313 documents (mean 1.00 
 
 \paragraph{Models.} We compare trivial baselines, a position-only baseline that predicts from normalized sentence position with no text, a per-sentence linear classifier over character n-gram features, and a fine-tuned XLM-RoBERTa \citep{conneau-etal-2020-unsupervised} tagger. The position-only baseline bins normalized sentence position and predicts the majority training label of each bin; because boundaries are sampled within a bounded band, it quantifies how much of any score is positional artifact rather than detection. The linear model uses character 3- to 5-grams weighted by sublinear TF-IDF with balanced class weights, chosen over word features because Sinhala is highly inflected and agglutinative; the reported variant also encodes the neighbouring sentences as a second feature block. The tagger encodes the whole document in one pass with a marker token before each sentence, so that each sentence representation is formed with its neighbours in attention range and can express discontinuity rather than an isolated judgement, following the sequence-labelling formulation of \citet{wang-etal-2023-seqxgpt}. Documents longer than the encoder window are chunked on sentence boundaries rather than truncated, so sentence and label sequences always stay aligned; the median document is 335 sub-word tokens and only 3.0\% exceed the 512-token window.
 
-\paragraph{Implementation.} The tagger is \texttt{xlm-roberta-base} fine-tuned for 12 epochs at learning rate $3\times10^{-5}$, batch size 4 without gradient accumulation (1{,}584 optimizer steps), mixed precision, and inverse-frequency class weights. We restore the best epoch by development F1 and tune the decision threshold on development data restricted to seen generators, giving 0.800. Training takes 24.6 minutes on a single 6\,GB consumer GPU, so the experiment is reproducible without cluster resources. We note that an earlier configuration using gradient accumulation gave only 165 optimizer steps, and the model collapsed to the majority class with a loss frozen near $\ln 2$; a 16-document overfitting check reached F1 1.000 and thereby isolated the fault to the optimization schedule rather than the model. We report this because a collapsed tagger yields numbers that closely resemble a genuine negative result about task difficulty.
+\paragraph{Implementation.} The tagger is \texttt{xlm-roberta-base} fine-tuned for 8 epochs at learning rate $3\times10^{-5}$, batch size 4 without gradient accumulation (5{,}264 optimizer steps), mixed precision, and inverse-frequency class weights. Epoch selection and the decision threshold (0.800) are both chosen on development data restricted to seen generators using \emph{exact-boundary} F1 rather than sentence F1, since selecting on one metric while reporting another optimizes the wrong objective. Training takes 109 minutes on a single 6\,GB consumer GPU, so the experiment is reproducible without cluster resources. We also implemented a structured decoder, a linear-chain CRF pass over the sentence scores whose transition cost is tuned on the same development data; it lands within 0.001 of thresholding on exact-boundary F1 and five points below it on document-exact accuracy, so we report thresholding. We note that an earlier configuration using gradient accumulation gave only 165 optimizer steps, and the model collapsed to the majority class with a loss frozen near $\ln 2$; a 16-document overfitting check reached F1 1.000 and thereby isolated the fault to the optimization schedule rather than the model. We report this because a collapsed tagger yields numbers that closely resemble a genuine negative result about task difficulty.
 
-\paragraph{Results.} Table~\ref{tab:boundary-main} reports the comparison and Figure~\ref{fig:models} visualizes it. The XLM-RoBERTa tagger reaches 0.513 exact-boundary F1 and 0.718 machine-class F1, well above the position-only baseline (0.421) and the best linear model (0.295). Four findings follow.
+\paragraph{Results.} Table~\ref{tab:boundary-main} reports the comparison and Figure~\ref{fig:models} visualizes it. The XLM-RoBERTa tagger reaches 0.603 exact-boundary F1 and 0.802 machine-class F1, against 0.438 for the best linear model and 0.284 for a position-only baseline that reads no text at all. Four findings follow.
 
-First, document context is necessary rather than merely helpful. The linear per-sentence classifier scores \emph{below} the position-only baseline on exact boundaries, 0.295 against 0.421, despite higher sentence accuracy, because it can recognize machine-sounding sentences but cannot represent the discontinuity between neighbours. Encoding the document jointly raises exact-boundary F1 to 0.513.
+First, encoding the document jointly matters, and the positional prior is weak. Predicting from sentence position alone reaches only 0.284 exact-boundary F1, so the constrained sampling of boundary locations is not by itself a route to the task, and every text model clears it. Moving from a per-sentence linear classifier to a document-level tagger raises exact-boundary F1 from 0.438 to 0.603, a 38\% relative gain, and machine-class F1 from 0.678 to 0.802. We note that on a preliminary 20\% slice of this corpus the position-only baseline scored far higher (0.421) and beat the linear model outright; that ordering did not survive the full corpus, which cautions against reading baseline comparisons off small slices.
 
-Second, generalization to an unseen generator is materially harder. As Table~\ref{tab:boundary-gen} and Figure~\ref{fig:gap} show, the tagger falls from 0.749 to 0.671 machine-class F1 and from 0.554 to 0.460 exact-boundary F1 between seen and held-out generators, while document-exact accuracy more than halves, from 0.238 to 0.093. This gap is visible only because the held-out generator was excluded from training before generation began.
+Second, generalization to an unseen generator is materially harder. As Table~\ref{tab:boundary-gen} and Figure~\ref{fig:gap} show, the tagger falls from 0.830 to 0.742 machine-class F1 and from 0.628 to 0.556 exact-boundary F1 between seen and held-out generators, while document-exact accuracy falls from 0.418 to 0.239. This gap is visible only because the held-out generator was excluded from training before generation began.
 
-Third, continuation is far easier to detect than internal rewriting, as Table~\ref{tab:boundary-type} shows. The continuation construction reaches 0.877 machine-class F1, while single-span and multi-span replacement reach 0.588 and 0.592. A trailing machine block is detectable; short rewritten spans embedded in human text are not. The ordering inverts on exact-boundary F1, where continuation is \emph{lowest} at 0.410 against 0.570 for multi-span, because a continuation document offers exactly one boundary and no partial credit, whereas a multi-span document offers up to six.
+Third, continuation is far easier to detect than internal rewriting, as Table~\ref{tab:boundary-type} shows. The continuation construction reaches 0.925 machine-class F1, while single-span and multi-span replacement reach 0.698 and 0.653. A trailing machine block is highly detectable; short rewritten spans embedded in human text remain substantially harder. The three converge on exact-boundary F1 (0.635, 0.546, 0.628), because a continuation document offers exactly one boundary and no partial credit, whereas a multi-span document offers up to six.
 
-Fourth, naive structural post-processing hurts. Merging predicted authorship runs shorter than two sentences lowered exact-boundary F1 from 0.295 to 0.201, because multi-span spans are one to two sentences by design and the smoother deletes genuine spans along with noise. Any structural prior over run length must therefore admit single-sentence spans.
+Fourth, naive structural post-processing hurts. Merging predicted authorship runs shorter than two sentences lowered the linear model's exact-boundary F1 from 0.438 to 0.314, because multi-span spans are one to two sentences by design and the smoother deletes genuine spans along with noise. Any structural prior over run length must therefore admit single-sentence spans, which is why our CRF decoder penalizes rather than forbids them.
 
-These numbers come from a 20\% slice, with development F1 still improving at the end of training while training loss fell to 0.084, and should therefore be read as a lower bound.
+Development exact-boundary F1 was still improving at the final epoch, so these numbers should be read as a lower bound on what this architecture reaches with longer training.
 
 \begin{table}[t]
 \centering
@@ -142,14 +142,14 @@ These numbers come from a 20\% slice, with development F1 still improving at the
 \toprule
 \textbf{Generator} & \textbf{Role} & \textbf{Train} & \textbf{Dev} & \textbf{Test} & \textbf{All} \\
 \midrule
-DeepSeek V3    & seen     & 249 & 51 & 52 & 352 \\
-GPT-4o         & seen     & 253 & 59 & 53 & 365 \\
-Gemini 2.5 Pro & held-out & 0   & 62 & 75 & 137 \\
+DeepSeek V3    & seen     & 1186 & 273 & 302 & 1761 \\
+GPT-4o         & seen     & 1304 & 283 & 311 & 1898 \\
+Gemini 2.5 Pro & held-out & 0    & 280 & 305 & 585 \\
 \midrule
-\textbf{Total} &          & \textbf{502} & \textbf{172} & \textbf{180} & \textbf{854} \\
+\textbf{Total} &          & \textbf{2490} & \textbf{836} & \textbf{918} & \textbf{4244} \\
 \bottomrule
 \end{tabular}
-\caption{Boundary-detection data (20\% slice), in documents. The held-out generator writes only development and test.}
+\caption{Boundary-detection data, in documents. The held-out generator writes only development and test.}
 \label{tab:boundary-data}
 \end{table}
 
@@ -163,15 +163,15 @@ Gemini 2.5 Pro & held-out & 0   & 62 & 75 & 137 \\
 \cmidrule(lr){2-4}\cmidrule(lr){5-6}
 \textbf{Model} & \textbf{Acc.} & \textbf{F1} & \textbf{P} & \textbf{exact} & \textbf{$\pm$1} \\
 \midrule
-All human       & 0.644 & 0.000 & 0.000 & 0.000 & 0.000 \\
-All AI          & 0.356 & 0.526 & 0.356 & 0.000 & 0.000 \\
-Random          & 0.552 & 0.371 & 0.371 & 0.360 & 0.542 \\
-Position only   & 0.686 & 0.518 & 0.571 & 0.421 & 0.612 \\
-Linear (best)   & 0.720 & 0.586 & 0.619 & 0.295 & 0.508 \\
-\textbf{XLM-R}  & \textbf{0.790} & \textbf{0.718} & \textbf{0.690} & \textbf{0.513} & \textbf{0.702} \\
+All human & 0.628 & 0.000 & 0.000 & 0.000 & 0.000 \\
+All AI & 0.372 & 0.542 & 0.372 & 0.000 & 0.000 \\
+Random & 0.534 & 0.367 & 0.371 & 0.357 & 0.542 \\
+Position only & 0.673 & 0.567 & 0.558 & 0.284 & 0.558 \\
+Linear (best) & 0.761 & 0.678 & 0.680 & 0.438 & 0.635 \\
+\textbf{XLM-R} & \textbf{0.846} & \textbf{0.802} & \textbf{0.770} & \textbf{0.603} & \textbf{0.772} \\
 \bottomrule
 \end{tabular}
-\caption{Boundary detection on the test set (20\% slice). Sentence F1 and precision are for the machine class. Exact-boundary F1 is the metric the trivial baselines cannot game; the $\pm$1 column is shown only to justify excluding it, since Random reaches 0.542 under it.}
+\caption{Boundary detection on the test set. Sentence F1 and precision are for the machine class. Exact-boundary F1 is the metric the trivial baselines cannot game; the $\pm$1 column is shown only to justify excluding it, since Random reaches 0.542 under it.}
 \label{tab:boundary-main}
 \end{table}
 
@@ -183,12 +183,12 @@ Linear (best)   & 0.720 & 0.586 & 0.619 & 0.295 & 0.508 \\
 \toprule
 \textbf{Test slice} & \textbf{Role} & \textbf{Sent.\ F1} & \textbf{Bound.} & \textbf{Doc.} \\
 \midrule
-DeepSeek V3    & seen     & 0.761 & 0.562 & -- \\
-GPT-4o         & seen     & 0.736 & 0.547 & -- \\
-Gemini 2.5 Pro & held-out & 0.671 & 0.460 & -- \\
+DeepSeek V3 & seen & 0.816 & 0.625 & -- \\
+GPT-4o & seen & 0.843 & 0.631 & -- \\
+Gemini 2.5 Pro & held-out & 0.742 & 0.556 & -- \\
 \midrule
-All seen       & seen     & 0.749 & 0.554 & 0.238 \\
-Held-out       & held-out & 0.671 & 0.460 & 0.093 \\
+All seen & seen & 0.830 & 0.628 & 0.418 \\
+Held-out & held-out & 0.742 & 0.556 & 0.239 \\
 \bottomrule
 \end{tabular}
 \caption{XLM-R by generator. \textbf{Bound.} is exact-boundary F1 and \textbf{Doc.} the fraction of documents whose entire boundary set is predicted exactly. The seen/held-out gap is the paper's central generalization result.}
@@ -205,12 +205,12 @@ Held-out       & held-out & 0.671 & 0.460 & 0.093 \\
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}
 \textbf{Construction} & \textbf{Lin.} & \textbf{XLM-R} & \textbf{Lin.} & \textbf{XLM-R} \\
 \midrule
-Continuation        & 0.787 & \textbf{0.877} & 0.262 & \textbf{0.410} \\
-Single-span replace & 0.357 & \textbf{0.588} & 0.226 & \textbf{0.493} \\
-Multi-span replace  & 0.346 & \textbf{0.592} & 0.152 & \textbf{0.570} \\
+Continuation & 0.821 & \textbf{0.925} & 0.391 & \textbf{0.635} \\
+Single-span replace & 0.474 & \textbf{0.698} & 0.350 & \textbf{0.546} \\
+Multi-span replace & 0.432 & \textbf{0.653} & 0.256 & \textbf{0.628} \\
 \bottomrule
 \end{tabular}
-\caption{Results by construction type. Continuation is far easier than embedded rewriting on sentence F1, but the ordering inverts on exact-boundary F1, where a single-boundary document allows no partial credit.}
+\caption{Results by construction type. Continuation is far easier than embedded rewriting on sentence F1; on exact-boundary F1 the three converge, since a single-boundary document allows no partial credit.}
 \label{tab:boundary-type}
 \end{table}
 
@@ -242,7 +242,7 @@ We have presented the first benchmark for detecting AI-generated Sinhala text, c
 
 \section*{Limitations}
 
-Results are from a preliminary 20\% slice of the boundary-detection corpus, so the transformer numbers are a lower bound, and the binary detectors are not yet evaluated. Generalization is measured against a single held-out generator, which cannot separate generalization to unseen models in general from generalization to one model in particular. Boundary detection covers only the encyclopedic register of Wikipedia, whose human text carries typographic noise that clean machine text lacks, so a detector may partly learn that cleaner text is machine-written; this confound is not yet controlled. By construction, boundaries fall between the first and last sentences and within a bounded length band, which a position-only baseline partly exploits. Finally, no human annotation study establishes the ceiling for either task, so it is not known how close the reported scores are to the achievable maximum.
+Development exact-boundary F1 was still rising at the final training epoch, so the transformer numbers are a lower bound for this architecture, and the binary detectors are not yet evaluated. Generalization is measured against a single held-out generator, which cannot separate generalization to unseen models in general from generalization to one model in particular. Boundary detection covers only the encyclopedic register of Wikipedia, whose human text carries typographic noise that clean machine text lacks, so a detector may partly learn that cleaner text is machine-written; this confound is not yet controlled. By construction, boundaries fall between the first and last sentences and within a bounded length band. A position-only baseline reaches 0.284 exact-boundary F1 on the full corpus, so this prior is measurable though weak; on a 20\% slice it was far stronger, so the effect is sensitive to corpus size. Finally, no human annotation study establishes the ceiling for either task, so it is not known how close the reported scores are to the achievable maximum.
 
 \section*{Ethics Statement}
 

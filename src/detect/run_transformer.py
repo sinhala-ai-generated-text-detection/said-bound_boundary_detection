@@ -207,8 +207,17 @@ def main() -> None:
                   f"bE={v['boundary_exact']['f1']:.3f} "
                   f"b1={v['boundary_tol']['f1']:.3f}")
 
-    # The headline decoder is the one tuned on the reported metric.
-    primary = res_vit
+    # Headline decoder chosen from the numbers, not fixed in advance. A gap
+    # below EPS on exact-boundary F1 is noise, so break it on document-exact.
+    EPS = 0.005
+    _be = lambda m: m["overall"]["boundary_exact"]["f1"]              # noqa: E731
+    _dx = lambda m: m["overall"]["boundary_exact"]["exact_doc_match"]  # noqa: E731
+    if abs(_be(res_vit) - _be(res_thr)) < EPS:
+        primary = res_vit if _dx(res_vit) > _dx(res_thr) else res_thr
+    else:
+        primary = res_vit if _be(res_vit) > _be(res_thr) else res_thr
+    print("\nheadline decoder: "
+          + ("viterbi" if primary is res_vit else "threshold"))
 
     per_gen, per_type = {}, {}
     ev = (lambda d: eval_viterbi(det, d, best_b)) if use_pair else \

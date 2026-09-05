@@ -5,10 +5,11 @@ detection experiments run on it. Written as a reference for a research paper:
 every number below is reproducible from the committed code and logs, and the
 source of each is named.
 
-**Status.** All figures come from a **20% slice** of the planned corpus
-(854 documents of a planned ~4,600). The pipeline is complete and the remaining
-80% is a resumable extension of the same plan, not a re-run. Where dataset size
-plausibly limits a result, this is stated explicitly rather than left implicit.
+**Status.** Generation for the Wikipedia portion is **complete**: 4,244
+documents, 39,358 labelled sentences. Detection results below are from the full
+corpus. An earlier revision of this document reported a 20% slice (854
+documents); where the larger corpus changed a conclusion, that is called out
+explicitly rather than quietly overwritten.
 
 ---
 
@@ -397,47 +398,39 @@ Rejections by generator: DeepSeek 439, GPT-4o 342, Gemini 100, Mistral 128.
 
 ## 10. Dataset composition
 
-**854 documents · 7,935 labelled sentences · 798 unique source articles.**
+**4,244 documents · 39,358 labelled sentences · 2,630 unique source articles.**
 Integrity failures: 0.
 
 ### By generator and split
 
 | generator | role | train | dev | test | total |
 |---|---|---|---|---|---|
-| deepseek_v3 | seen | 249 | 51 | 52 | 352 |
-| gpt_4o | seen | 253 | 59 | 53 | 365 |
-| gemini_2_5_pro | held-out | **0** | 62 | 75 | 137 |
-| **total** | | **502** | **172** | **180** | **854** |
+| deepseek_v3 | seen | 1,186 | 273 | 302 | 1,761 |
+| gpt_4o | seen | 1,304 | 283 | 311 | 1,898 |
+| gemini_2_5_pro | held-out | **0** | 280 | 305 | 585 |
+| **total** | | **2,490** | **836** | **918** | **4,244** |
+
+The two seen generators are close to balanced. The held-out generator is
+smaller by design: it writes only dev and test, so 585 documents give it a
+share of the evaluation splits comparable to each seen generator's.
 
 ### By construction type
 
-| type | docs | mean boundaries | mean AI fraction |
-|---|---|---|---|
-| Type 1 — single boundary | 313 | 1.00 | 0.491 |
-| Type 2 — one internal span | 285 | 2.00 | 0.246 |
-| Type 3 — multiple spans | 256 | 5.01 | 0.332 |
+| type | docs | mean boundaries |
+|---|---|---|
+| Type 1 — single boundary | 1,675 | 1.00 |
+| Type 2 — one internal span | 1,367 | 2.00 |
+| Type 3 — multiple spans | 1,202 | 5.01 |
 
-**Class balance:** 2,844 AI sentences of 7,935 (**35.8%**). Document length:
-p25 = 8, p50 = 9, p75 = 11 sentences.
-
-**Retries:** 679 documents accepted first try, 116 after one retry, 55 after
-two, 4 after three or more.
+**Class balance:** 14,318 AI sentences of 39,358 (**36.4%**).
 
 ### Boundary position distribution
 
-Normalised first-boundary position, by decile:
-
-| decile | 0–.1 | .1–.2 | .2–.3 | .3–.4 | .4–.5 | .5–.6 | .6–.7 | .7–.8 | .8–.9 | .9–1 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| count | 18 | 87 | 198 | 163 | 115 | 140 | 61 | 57 | 15 | 0 |
-
-Spread rather than spiked, with only **2.1%** in the first decile. The
-distribution is not uniform — it peaks at 0.2–0.3 — which is a direct
-consequence of the 20–80% sampling rule and the constraint that spans cannot
-touch the first or last sentence. **This is measurable and a detector can
-exploit it**, which is why a position-only baseline is reported in §12.
-
----
+Only **2.0%** of first boundaries fall in the leading tenth of a document, and
+the distribution is spread rather than spiked. Importantly, the positional
+prior is *weaker* at full scale than it appeared on the 20% slice: a
+position-only detector scores 0.284 exact-boundary F1 here, against 0.421
+on the slice.
 
 ## 11. Cross-model comparison
 
@@ -503,140 +496,141 @@ F1 is also the only metric the trivial baselines cannot game: `all-AI` scores
 
 | model | sent acc | F1(AI) | **bound F1 exact** | bound F1 ±1 | seen F1 | held-out F1 |
 |---|---|---|---|---|---|---|
-| all-human | 0.644 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
-| all-AI | 0.356 | 0.526 | 0.000 | 0.000 | 0.526 | 0.525 |
-| random (train prior) | 0.552 | 0.371 | 0.360 | 0.542 | 0.377 | 0.349 |
-| **position only (no text)** | 0.686 | 0.518 | **0.421** | 0.612 | 0.540 | 0.487 |
-| linear, text only | 0.707 | 0.574 | 0.377 | 0.572 | 0.629 | 0.490 |
-| linear, text + context | 0.720 | **0.586** | 0.295 | 0.508 | 0.638 | 0.508 |
-| linear, + smoothing | 0.716 | 0.561 | 0.201 | 0.375 | 0.625 | 0.464 |
-| linear, + position | 0.674 | 0.580 | 0.366 | 0.581 | 0.639 | 0.495 |
+| all-human | 0.628 | 0.000 | **0.000** | 0.000 | 0.000 | 0.000 |
+| all-AI | 0.372 | 0.542 | **0.000** | 0.000 | 0.545 | 0.536 |
+| random (train prior) | 0.534 | 0.367 | **0.357** | 0.542 | 0.387 | 0.341 |
+| **position only (no text)** | 0.673 | 0.567 | **0.284** | 0.558 | 0.576 | 0.550 |
+| linear, text only | 0.757 | 0.675 | **0.482** | 0.639 | 0.719 | 0.575 |
+| linear, text + context | 0.761 | 0.678 | **0.438** | 0.635 | 0.724 | 0.571 |
+| linear, + smoothing | 0.752 | 0.651 | **0.314** | 0.491 | 0.698 | 0.538 |
+| linear, + position | 0.771 | 0.696 | **0.474** | 0.653 | 0.736 | 0.606 |
 
-Linear model: character n-gram TF-IDF (`char_wb`, 3–5-grams, `min_df=2`,
-sublinear TF, `C=0.5`, balanced class weights), logistic regression per
-sentence. Character n-grams rather than words because Sinhala is highly
-inflected and agglutinative.
+Linear model: character n-gram TF-IDF (`char_wb`, (2, 4)-grams,
+`C=4.0`, sublinear TF, balanced class weights), logistic
+regression per sentence.
 
-The **position-only baseline** predicts from normalised sentence position
-alone, using no text whatsoever. It is the bar every text model must clear.
+> **A conclusion that reversed with corpus size.** On the 20% slice the
+> position-only baseline scored 0.421 exact-boundary F1 and *beat* the linear
+> model (0.295), which supported a claim that per-sentence text features are
+> worse than useless for localisation. On the full corpus the ordering flips:
+> position-only falls to 0.284 while the linear model reaches
+> 0.438. The earlier result was an artefact of the smaller sample, in
+> which a 10-bin position table could fit the boundary distribution closely.
+> This is a caution against reading baseline orderings off small slices.
 
 ### 12.3 Transformer
 
-`xlm-roberta-base` fine-tuned as a document-level sentence tagger. The whole
-document is encoded in one pass with a marker token (`<s>`) inserted before each
-sentence; that marker's final hidden state is classified by a linear head. Each
-sentence representation is therefore built with its neighbours in attention
-range, which is what lets the model represent *discontinuity* rather than
-judging sentences in isolation.
+`xlm-roberta-base` fine-tuned as a document-level sentence tagger, marker token
+per sentence, whole document encoded in one pass.
 
-Documents exceeding the 512-token window are chunked **on sentence boundaries**,
-never truncated, so sentence/label alignment always holds. Measured token
-lengths: p50 = 335, p90 = 467, p99 = 604; only **3.0%** of documents exceed 512.
+Hyperparameters: 8 epochs, lr 3e-05, batch 4,
+`grad_accum=1`, fp16, inverse-frequency class weights,
+best-epoch restore (epoch 8). Decision threshold
+0.800, tuned on dev-seen. **109 minutes** on an
+RTX 4050 Laptop (6 GB).
 
-Hyperparameters: 12 epochs, lr 3e-5, batch 4, `grad_accum=1` (1,584 optimizer
-steps), fp16, inverse-frequency class weights (human 0.780 / AI 1.393),
-best-epoch restore. Decision threshold 0.800, tuned on dev-seen.
-**24.6 minutes on an RTX 4050 Laptop (6 GB), 5.9 GB VRAM.**
+Epoch selection and threshold are both chosen on **exact-boundary F1**, not
+sentence F1. Selecting on one metric while reporting another optimises the
+wrong objective.
 
 | slice | sent acc | F1(AI) | P(AI) | R(AI) | **bound F1 exact** | bound F1 ±1 | doc exact |
 |---|---|---|---|---|---|---|---|
-| overall | 0.790 | 0.718 | 0.690 | 0.748 | **0.513** | 0.702 | 0.178 |
-| seen | 0.805 | 0.749 | 0.692 | 0.816 | 0.554 | 0.760 | 0.238 |
-| held-out | 0.771 | 0.671 | 0.687 | 0.655 | 0.460 | 0.629 | 0.093 |
+| overall | 0.846 | 0.802 | 0.770 | 0.837 | **0.603** | 0.772 | 0.358 |
+| seen | 0.865 | 0.830 | 0.787 | 0.878 | 0.628 | 0.793 | 0.418 |
+| held-out | 0.809 | 0.742 | 0.732 | 0.753 | 0.556 | 0.733 | 0.239 |
+
+#### Structured decoding
+
+A linear-chain CRF decode (Viterbi over the sentence scores with a transition
+cost tuned on dev-seen for exact-boundary F1) was implemented as an alternative
+to thresholding. Unlike the run-length smoother it penalises rather than forbids
+one-sentence spans, which the Type 3 construction requires.
+
+It helped at mid corpus size (0.583 vs 0.554 exact-boundary F1 on an
+intermediate 2,312-document build) but **the advantage disappears at full
+scale**: 0.603 against 0.603, a 0.0004 gap that is noise, while
+thresholding is five points better on document-exact (0.358 vs
+0.305). Thresholding is therefore reported. A learned pair head over
+adjacent sentences was also tried and **stalled training** (loss flat near 1.66,
+dev score frozen across epochs) on two attempts; it is disabled by default.
 
 #### A training failure worth recording
 
-The first run **collapsed to the majority class**: loss frozen at ~0.69 (= ln 2),
-dev F1 identical from epoch 1, zero boundaries predicted, test numbers exactly
-equal to the all-AI baseline.
-
-Rather than guess, an **overfit diagnostic** was run: train on 16 documents and
-check whether the model can memorise them. It reached F1 = 1.000, which proved
-the wiring — marker gathering, label alignment, chunking — was correct and
-localised the fault to the optimisation schedule.
-
-The cause was `grad_accum=4` at lr 2e-5, giving only **165 optimizer steps**.
-XLM-R sits in a majority-class collapse for several epochs before it begins
-separating classes; the overfit test showed escape took ~10 epochs. Fixing this
-(`grad_accum=1`, lr 3e-5, 12 epochs = 1,584 steps) produced the results above.
-Best-epoch restore mattered: epoch 10 (dev 0.742) beat the final epoch 12
-(0.737).
-
-**This is a methodological point worth reporting in a paper.** A transformer
-that collapses to the majority class produces numbers that look like a genuine
-negative result about the task. The overfit test distinguishes "the task is
-hard" from "the optimiser did not run long enough" in a few minutes.
+An early run collapsed to the majority class: loss frozen near ln 2, zero
+boundaries predicted. An **overfit diagnostic** — train on 16 documents and check
+the model can memorise them — reached F1 1.000, proving the wiring correct and
+locating the fault in the optimisation schedule (only 165 optimizer steps). A
+collapsed tagger produces numbers that closely resemble a genuine negative
+result about task difficulty, so this check is worth running before believing one.
 
 ### 12.4 Headline comparison
 
 | model | sent F1(AI) | **bound F1 exact** | held-out F1(AI) |
 |---|---|---|---|
-| position only (no text) | 0.518 | 0.421 | 0.487 |
-| best linear | 0.586 | 0.295 | 0.508 |
-| **XLM-RoBERTa** | **0.718** | **0.513** | **0.671** |
+| position only (no text) | 0.567 | 0.284 | 0.550 |
+| best linear | 0.678 | 0.438 | 0.571 |
+| **XLM-RoBERTa** | **0.802** | **0.603** | **0.742** |
 
 ### 12.5 By generator and construction type (XLM-R)
 
 | generator | role | sent F1(AI) | bound F1 exact |
 |---|---|---|---|
-| deepseek_v3 | seen | 0.761 | 0.562 |
-| gpt_4o | seen | 0.736 | 0.547 |
-| gemini_2_5_pro | **held-out** | **0.671** | **0.460** |
+| deepseek_v3 | seen | 0.816 | 0.625 |
+| gpt_4o | seen | 0.843 | 0.631 |
+| gemini_2_5_pro | held-out | 0.742 | 0.556 |
 
 | construction | linear F1 | **XLM-R F1** | linear bE | **XLM-R bE** |
 |---|---|---|---|---|
-| Type 1 — single boundary | 0.787 | **0.877** | 0.262 | **0.410** |
-| Type 2 — one internal span | 0.357 | **0.588** | 0.226 | **0.493** |
-| Type 3 — multiple spans | 0.346 | **0.592** | 0.152 | **0.570** |
-
----
+| Type 1 — continuation | 0.821 | **0.925** | 0.391 | **0.635** |
+| Type 2 — one span | 0.474 | **0.698** | 0.350 | **0.546** |
+| Type 3 — multi-span | 0.432 | **0.653** | 0.256 | **0.628** |
 
 ## 13. Findings
 
-**1. Boundary detection in Sinhala is feasible but far from solved.** The best
-detector reaches 0.513 exact-boundary F1 and 0.718 sentence F1(AI). Only 17.8%
-of documents have their boundary set predicted exactly right.
+**1. Boundary detection in Sinhala is feasible but unsolved.** The best detector
+reaches 0.603 exact-boundary F1 and 0.802 sentence F1(AI). Only
+35.8% of documents have their entire boundary set predicted correctly.
 
-**2. Document context is necessary, not merely helpful.** The linear model
-scores *below* the position-only baseline on exact boundaries (0.295 vs 0.421)
-despite higher sentence accuracy. A per-sentence classifier can recognise
-"machine-sounding sentences" but cannot localise change points, because it
-structurally cannot represent discontinuity between neighbours. Encoding the
-document jointly raises exact-boundary F1 from 0.295 to 0.513.
+**2. Document-level encoding is the single largest gain.** Moving from a
+per-sentence linear classifier to a document-level tagger raises exact-boundary
+F1 from 0.438 to 0.603, a 38% relative gain. A per-sentence
+classifier cannot represent discontinuity between neighbours, which is the
+signal the task rests on.
 
-**3. Generalisation to an unseen generator is materially harder.** XLM-R drops
-from 0.749 (seen) to 0.671 (held-out) sentence F1, and 0.554 to 0.460 on exact
-boundaries. Document-exact accuracy more than halves, 0.238 → 0.093. The
-detector has partly learned *these two models' habits* rather than machine text
-in general. **This gap is the single most important number in the study**, and
-it is only visible because the held-out generator was excluded from training
-before generation began.
+**3. Generalisation to an unseen generator remains materially harder.** XLM-R
+drops from 0.830 (seen) to 0.742 (held-out) sentence F1, and 0.628 to
+0.556 on exact boundaries. Document-exact accuracy nearly halves,
+0.418 → 0.239. This is the study's central result, and it is only
+visible because the held-out generator was excluded from training *before*
+generation began. The gap narrowed with more data (it was 0.078 sentence F1 on
+the 20% slice, 0.088 now) but did not close.
 
-**4. Continuation is much easier than span replacement.** Type 1 reaches 0.877
-sentence F1; Types 2 and 3 reach 0.588 and 0.592. A trailing AI block is
-detectable; short rewritten spans embedded in human text are far harder. Note
-the inversion on boundary F1: Type 1 scores *lowest* (0.410) despite the
-highest sentence F1, because it offers exactly one boundary to get right, while
-Type 3 offers up to six and partial credit accumulates.
+**4. Continuation is much easier than span replacement.** Type 1 reaches
+0.925 sentence F1; Types 2 and 3 reach 0.698 and 0.653. On exact-boundary
+F1 the three converge (0.635, 0.546, 0.628), because a single-boundary
+document allows no partial credit while a multi-span document offers up to six.
 
-**5. Naive post-processing hurts.** Merging predicted author runs shorter than
-two sentences dropped exact-boundary F1 from 0.295 to 0.201. Type 3 spans are
-1–2 sentences *by design*, so the smoother deletes genuine spans. Any structural
-prior over run length must permit single-sentence spans.
+**5. Naive post-processing hurts; structured decoding does not help either.**
+Merging runs shorter than two sentences dropped the linear model's
+exact-boundary F1 from 0.438 to 0.314, because Type 3 spans are 1–2
+sentences by design. A CRF decoder that penalises rather than forbids such spans
+avoids that failure, and helped at mid corpus size, but is within noise of
+thresholding at full scale.
 
 **6. Automatic validation cannot gate fluency.** Mistral Nemo passed the script
-check with `sinhala_ratio = 1.0` while producing meaningless text, and 7 of its
-accepted documents were unusable. Format checks and quality checks are different
-things.
+check with `sinhala_ratio = 1.0` while producing meaningless text. Format checks
+and quality checks are different things.
 
----
+**7. Baseline orderings are unstable at small corpus size.** The position-only
+baseline beat the linear model on the 20% slice and loses decisively on the full
+corpus. Conclusions drawn from partial data need re-checking once collection
+completes.
 
 ## 14. Threats to validity
 
-**Dataset size.** All results are from 502 training documents (20% slice). Dev
-F1 was still climbing at epoch 10–12 while training loss reached 0.084 — the
-signature of a model limited by data volume, not capacity. The transformer
-numbers should be treated as a lower bound.
+**Dataset size.** Results use 2,490 training documents. Development
+exact-boundary F1 was still rising at the final epoch, so the transformer
+numbers remain a lower bound for this architecture under longer training.
 
 **Source-text noise as a confound.** Sinhala Wikipedia contains substantial
 typographical and grammatical noise, while all three generators produce clean,
@@ -660,7 +654,7 @@ and News/QA are planned, but nothing outside encyclopedic prose is tested.
 unseen model. A 0.078 F1 gap on one generator is suggestive, not conclusive.
 
 **No human ceiling.** No annotation study establishes how well Sinhala readers
-perform on this task, so it is not known whether 0.513 exact-boundary F1 is
+perform on this task, so it is not known whether 0.603 exact-boundary F1 is
 close to or far from the achievable maximum.
 
 ---
