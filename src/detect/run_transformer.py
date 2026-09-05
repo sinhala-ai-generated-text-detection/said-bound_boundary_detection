@@ -80,6 +80,9 @@ def main() -> None:
                          "objective. On the 20%% slice this stalled training "
                          "(loss flat near 1.66, dev score frozen), so it is "
                          "off by default; Viterbi decoding does not need it.")
+    ap.add_argument("--likelihood", action="store_true",
+                    help="concatenate cached masked-LM likelihood features to "
+                         "each sentence representation (see likelihood.py)")
     ap.add_argument("--no-fp16", action="store_true")
     ap.add_argument("--cpu", action="store_true")
     ap.add_argument("--save-to", default="models/xlmr_tagger")
@@ -114,13 +117,31 @@ def main() -> None:
     print(f"\nclass weights: human={w_h:.3f} ai={w_ai:.3f}")
 
     use_pair = a.pair_head
+    feat_map = None
+    if a.likelihood:
+        from likelihood import load_features
+        feat_map = load_features()
+        if not feat_map:
+            raise SystemExit(
+                "No cached likelihood features. Run:\n"
+                "  python src/detect/likelihood.py --build")
+        covered = sum(1 for d in ds.docs if d.record_id in feat_map)
+        print(f"likelihood features: {len(feat_map)} cached, "
+              f"{covered}/{len(ds)} documents covered "
+              f"({len(next(iter(feat_map.values()))[0])} dims/sentence)")
+        if covered < len(ds):
+            # Silently zero-filling missing documents would bias the comparison,
+            # so make the shortfall visible rather than absorbing it.
+            print(f"  WARNING {len(ds) - covered} documents have no features "
+                  f"and will be zero-filled")
+
     det = TransformerDetector(
         model_name=a.model, epochs=a.epochs, lr=a.lr,
         batch_size=a.batch_size, grad_accum=a.grad_accum,
         max_length=a.max_length, fp16=not a.no_fp16,
         class_weight=[w_h, w_ai], seed=cfg["seed"],
         use_pair_head=use_pair, pair_loss_weight=a.pair_loss_weight,
-        pair_pos_weight=a.pair_pos_weight)
+        pair_pos_weight=a.pair_pos_weight, feat_map=feat_map)
     if a.cpu:
         det.device = torch.device("cpu")
         det.fp16 = False
@@ -238,6 +259,8 @@ def main() -> None:
         "model": a.model, "epochs": a.epochs, "lr": a.lr,
         "batch_size": a.batch_size, "grad_accum": a.grad_accum,
         "use_pair_head": use_pair,
+        "likelihood_features": bool(feat_map),
+        "feat_dim": det.feat_dim,
         "pair_loss_weight": a.pair_loss_weight,
         "pair_pos_weight": a.pair_pos_weight,
         "threshold": best_t, "boundary_bias": best_b,

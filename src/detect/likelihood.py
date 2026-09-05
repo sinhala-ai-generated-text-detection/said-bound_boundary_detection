@@ -107,41 +107,53 @@ class LikelihoodScorer:
         entropy = np.full(n, np.nan)
         top1 = np.zeros(n, dtype=bool)
 
+        # All stride offsets go through the encoder in ONE batch. The vocabulary
+        # projection is then applied only at the masked positions: running the
+        # full lm_head over every position would build a (batch, 512, 250002)
+        # tensor, which is both the memory blow-up and ~8x wasted compute, since
+        # only about one token in `stride` is ever read.
         offsets = list(range(self.stride))
+        positions = [[i for i in range(1, n - 1) if i % self.stride == off]
+                     for off in offsets]
+        batch = base.unsqueeze(0).repeat(len(offsets), 1).clone()
+        for r, pos in enumerate(positions):
+            if pos:
+                batch[r, pos] = self.mask_id
+
         with torch.no_grad():
-            for start in range(0, len(offsets), self.batch_size):
-                chunk = offsets[start:start + self.batch_size]
-                batch = base.unsqueeze(0).repeat(len(chunk), 1).clone()
-                positions = []
-                for r, off in enumerate(chunk):
-                    pos = [i for i in range(1, n - 1) if i % self.stride == off]
-                    positions.append(pos)
-                    if pos:
-                        batch[r, pos] = self.mask_id
-                with torch.autocast("cuda", dtype=torch.float16,
-                                    enabled=self.device == "cuda"):
-                    out = self.model(
-                        input_ids=batch,
-                        attention_mask=attn.unsqueeze(0).repeat(len(chunk), 1)
-                    ).logits
-                for r, pos in enumerate(positions):
-                    if not pos:
-                        continue
-                    p = torch.tensor(pos, device=self.device)
-                    true = base[p]
-                    # Slice first: (len(pos), vocab) is ~64 MB, the full
-                    # sequence would be gigabytes.
-                    row = torch.log_softmax(out[r, p].float(), dim=-1)
-                    lp = row.gather(1, true.unsqueeze(1)).squeeze(1)
-                    # rank = how many tokens the model scored above the truth
-                    rk = (row > lp.unsqueeze(1)).sum(1)
-                    ent = -(row.exp() * row).sum(-1)
-                    logp[pos] = lp.cpu().numpy()
-                    rank[pos] = rk.cpu().numpy()
-                    entropy[pos] = ent.cpu().numpy()
-                    top1[pos] = (rk == 0).cpu().numpy()
-                    del row, lp, rk, ent
-                del out
+            with torch.autocast("cuda", dtype=torch.float16,
+                                enabled=self.device == "cuda"):
+                hidden = self.model.roberta(
+                    input_ids=batch,
+                    attention_mask=attn.unsqueeze(0).repeat(len(offsets), 1),
+                ).last_hidden_state                       # (S, T, 768)
+
+            rows, flat_pos = [], []
+            for r, pos in enumerate(positions):
+                if pos:
+                    rows.append(hidden[r, torch.tensor(pos, device=self.device)])
+                    flat_pos.extend(pos)
+            if not flat_pos:
+                return [[0.0] * len(FEATURE_NAMES) for _ in sentences]
+            gathered = torch.cat(rows, dim=0)             # (n_masked, 768)
+
+            # Project in slices so the (n_masked, 250002) matrix stays bounded.
+            CH = 256
+            for s0 in range(0, gathered.size(0), CH):
+                sl = slice(s0, min(s0 + CH, gathered.size(0)))
+                logits = self.model.lm_head(gathered[sl]).float()
+                lsm = torch.log_softmax(logits, dim=-1)
+                idx = flat_pos[sl]
+                true = base[torch.tensor(idx, device=self.device)]
+                lp = lsm.gather(1, true.unsqueeze(1)).squeeze(1)
+                rk = (lsm > lp.unsqueeze(1)).sum(1)
+                ent = -(lsm.exp() * lsm).sum(-1)
+                logp[idx] = lp.cpu().numpy()
+                rank[idx] = rk.cpu().numpy()
+                entropy[idx] = ent.cpu().numpy()
+                top1[idx] = (rk == 0).cpu().numpy()
+                del logits, lsm, lp, rk, ent
+            del hidden, gathered, rows
 
         feats = []
         for si in range(len(sentences)):

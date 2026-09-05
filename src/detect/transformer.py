@@ -48,14 +48,18 @@ class SentenceTaggingDataset(TorchDataset):
     """Turns Doc objects into encoder chunks with per-sentence label targets."""
 
     def __init__(self, docs, tokenizer, max_length: int = 512,
-                 marker: str | None = None):
+                 marker: str | None = None, feat_map=None, feat_dim: int = 0):
         self.tokenizer = tokenizer
         self.max_length = max_length
+        # Optional per-sentence numeric features (e.g. LM likelihood stats),
+        # keyed by record_id and aligned to sentence index.
+        self.feat_map = feat_map or {}
+        self.feat_dim = feat_dim
         # The marker must be a real token in the vocabulary. XLM-R's <s> is a
         # natural choice: it already means "segment start" to the model.
         self.marker = marker or tokenizer.cls_token
         self.marker_id = tokenizer.convert_tokens_to_ids(self.marker)
-        self.items: list[tuple[DocEncoding, list[int], int]] = []
+        self.items: list[tuple[DocEncoding, list[int], int, list]] = []
         self._build(docs)
 
     def _build(self, docs) -> None:
@@ -69,6 +73,7 @@ class SentenceTaggingDataset(TorchDataset):
             chunk_markers: list[int] = []
             chunk_sidx: list[int] = []
             chunk_labels: list[int] = []
+            doc_feats = self.feat_map.get(getattr(d, "record_id", None))
 
             def flush():
                 if not chunk_markers:
@@ -77,7 +82,12 @@ class SentenceTaggingDataset(TorchDataset):
                 # markers were recorded relative to chunk_ids; shift by the bos
                 mk = [m + 1 for m in chunk_markers]
                 enc = DocEncoding(ids, [1] * len(ids), mk, list(chunk_sidx))
-                self.items.append((enc, list(chunk_labels), di))
+                if self.feat_dim:
+                    feats = [list(doc_feats[i]) if doc_feats and i < len(doc_feats)
+                             else [0.0] * self.feat_dim for i in chunk_sidx]
+                else:
+                    feats = [[] for _ in chunk_sidx]
+                self.items.append((enc, list(chunk_labels), di, feats))
 
             for si, ids in enumerate(per_sent):
                 need = len(ids) + 1
@@ -104,24 +114,28 @@ class SentenceTaggingDataset(TorchDataset):
 
 
 def collate(batch, pad_id: int):
-    maxlen = max(len(e.input_ids) for e, _, _ in batch)
-    maxm = max(len(e.marker_pos) for e, _, _ in batch)
+    maxlen = max(len(e.input_ids) for e, _, _, _ in batch)
+    maxm = max(len(e.marker_pos) for e, _, _, _ in batch)
+    fdim = len(batch[0][3][0]) if batch[0][3] and batch[0][3][0] else 0
     B = len(batch)
     input_ids = torch.full((B, maxlen), pad_id, dtype=torch.long)
     attn = torch.zeros((B, maxlen), dtype=torch.long)
     marker = torch.zeros((B, maxm), dtype=torch.long)
     marker_mask = torch.zeros((B, maxm), dtype=torch.bool)
     labels = torch.full((B, maxm), -100, dtype=torch.long)
+    extra = torch.zeros((B, maxm, fdim), dtype=torch.float) if fdim else None
     meta = []
-    for b, (e, lab, di) in enumerate(batch):
+    for b, (e, lab, di, feats) in enumerate(batch):
         n, m = len(e.input_ids), len(e.marker_pos)
         input_ids[b, :n] = torch.tensor(e.input_ids)
         attn[b, :n] = torch.tensor(e.attention_mask)
         marker[b, :m] = torch.tensor(e.marker_pos)
         marker_mask[b, :m] = True
         labels[b, :m] = torch.tensor(lab)
+        if fdim:
+            extra[b, :m] = torch.tensor(feats, dtype=torch.float)
         meta.append((di, e.sent_idx))
-    return input_ids, attn, marker, marker_mask, labels, meta
+    return input_ids, attn, marker, marker_mask, labels, meta, extra
 
 
 class SentenceTagger(nn.Module):
@@ -136,12 +150,17 @@ class SentenceTagger(nn.Module):
     """
 
     def __init__(self, model_name: str, dropout: float = 0.1,
-                 use_pair_head: bool = True):
+                 use_pair_head: bool = True, extra_dim: int = 0):
         super().__init__()
         self.encoder = AutoModel.from_pretrained(model_name)
         h = self.encoder.config.hidden_size
         self.dropout = nn.Dropout(dropout)
-        self.head = nn.Linear(h, 2)
+        self.extra_dim = extra_dim
+        # Likelihood features are concatenated to the contextual sentence
+        # representation rather than used alone: they say how machine-like a
+        # sentence looks in isolation, which is complementary to what the
+        # encoder sees from its neighbours.
+        self.head = nn.Linear(h + extra_dim, 2)
         self.use_pair_head = use_pair_head
         if use_pair_head:
             # [left ; right ; |left-right| ; left*right] - the difference and
@@ -150,13 +169,17 @@ class SentenceTagger(nn.Module):
                 nn.Linear(4 * h, h), nn.GELU(), nn.Dropout(dropout),
                 nn.Linear(h, 1))
 
-    def forward(self, input_ids, attention_mask, marker_pos, marker_mask):
+    def forward(self, input_ids, attention_mask, marker_pos, marker_mask,
+                extra=None):
         out = self.encoder(input_ids=input_ids,
                            attention_mask=attention_mask).last_hidden_state
         # Gather the marker position for every sentence slot.
         idx = marker_pos.unsqueeze(-1).expand(-1, -1, out.size(-1))
         sent_repr = self.dropout(out.gather(1, idx))
-        logits = self.head(sent_repr)
+        head_in = sent_repr
+        if self.extra_dim and extra is not None:
+            head_in = torch.cat([sent_repr, extra.to(sent_repr.dtype)], dim=-1)
+        logits = self.head(head_in)
         if not self.use_pair_head:
             return logits, None
         left, right = sent_repr[:, :-1, :], sent_repr[:, 1:, :]
@@ -216,7 +239,7 @@ class TransformerDetector:
                  batch_size=4, grad_accum=4, lr=2e-5, epochs=4,
                  warmup_ratio=0.1, seed=42, fp16=True, class_weight=None,
                  max_grad_norm=1.0, verbose=True, use_pair_head=True,
-                 pair_loss_weight=1.0, pair_pos_weight=2.0):
+                 pair_loss_weight=1.0, pair_pos_weight=2.0, feat_map=None):
         self.model_name = model_name
         self.max_length = max_length
         self.batch_size = batch_size
@@ -235,6 +258,14 @@ class TransformerDetector:
         # the pair head learns to say "no change" everywhere.
         self.pair_pos_weight = pair_pos_weight
         self.boundary_bias = 0.0
+        # Per-sentence numeric features (LM likelihood stats), standardised
+        # with training-set statistics only.
+        self.feat_map = feat_map or {}
+        self.feat_dim = 0
+        if self.feat_map:
+            self.feat_dim = len(next(iter(self.feat_map.values()))[0])
+        self._mu = None
+        self._sd = None
         # The runner's probe reports exact-boundary F1 regardless of whether
         # the pair head is on, so the label says so. A log that claims one
         # metric while printing another is how a regression goes unnoticed.
@@ -250,8 +281,34 @@ class TransformerDetector:
     def name(self) -> str:
         return f"{self.model_name} (ep={self.epochs}, lr={self.lr})"
 
+    def _fit_scaler(self, docs) -> None:
+        """Standardise features using TRAIN statistics only."""
+        rows = [f for d in docs for f in self.feat_map.get(d.record_id, [])]
+        if not rows:
+            self._mu = np.zeros(self.feat_dim)
+            self._sd = np.ones(self.feat_dim)
+            return
+        arr = np.asarray(rows, dtype=float)
+        self._mu = arr.mean(0)
+        sd = arr.std(0)
+        sd[sd < 1e-6] = 1.0
+        self._sd = sd
+
+    def _scaled_map(self, docs):
+        if not self.feat_dim:
+            return None
+        out = {}
+        for d in docs:
+            f = self.feat_map.get(d.record_id)
+            if f:
+                out[d.record_id] = ((np.asarray(f, dtype=float) - self._mu)
+                                    / self._sd).tolist()
+        return out
+
     def _loader(self, docs, shuffle: bool):
-        ds = SentenceTaggingDataset(docs, self.tokenizer, self.max_length)
+        ds = SentenceTaggingDataset(
+            docs, self.tokenizer, self.max_length,
+            feat_map=self._scaled_map(docs), feat_dim=self.feat_dim)
         pad = self.tokenizer.pad_token_id
         return DataLoader(ds, batch_size=self.batch_size, shuffle=shuffle,
                           collate_fn=lambda b: collate(b, pad))
@@ -260,8 +317,11 @@ class TransformerDetector:
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = SentenceTagger(self.model_name,
-                                    use_pair_head=self.use_pair_head).to(self.device)
+        if self.feat_dim:
+            self._fit_scaler(docs)
+        self.model = SentenceTagger(
+            self.model_name, use_pair_head=self.use_pair_head,
+            extra_dim=self.feat_dim).to(self.device)
 
         loader = self._loader(docs, shuffle=True)
         steps = max(1, len(loader) // self.grad_accum) * self.epochs
@@ -286,12 +346,13 @@ class TransformerDetector:
         for ep in range(self.epochs):
             tot, nb = 0.0, 0
             opt.zero_grad(set_to_none=True)
-            for i, (ids, attn, mk, mkm, lab, _) in enumerate(loader):
+            for i, (ids, attn, mk, mkm, lab, _, ex) in enumerate(loader):
                 ids, attn = ids.to(self.device), attn.to(self.device)
                 mk, lab = mk.to(self.device), lab.to(self.device)
+                ex = ex.to(self.device) if ex is not None else None
                 with torch.amp.autocast("cuda", enabled=self.fp16 and
                                         self.device.type == "cuda"):
-                    logits, pair_logit = self.model(ids, attn, mk, mkm)
+                    logits, pair_logit = self.model(ids, attn, mk, mkm, ex)
                     loss = lossf(logits.reshape(-1, 2), lab.reshape(-1))
                     if pair_logit is not None and self.pair_loss_weight > 0:
                         # Boundary target for pair (i-1, i): did the label
@@ -358,11 +419,12 @@ class TransformerDetector:
         # (doc index, sentence index) rather than by arrival order.
         logp: dict[tuple[int, int], np.ndarray] = {}
         pairs: dict[tuple[int, int], float] = {}
-        for ids, attn, mk, mkm, lab, meta in loader:
+        for ids, attn, mk, mkm, lab, meta, ex in loader:
             ids, attn, mk = ids.to(self.device), attn.to(self.device), mk.to(self.device)
+            ex = ex.to(self.device) if ex is not None else None
             with torch.amp.autocast("cuda", enabled=self.fp16 and
                                     self.device.type == "cuda"):
-                logits, pair_logit = self.model(ids, attn, mk, mkm)
+                logits, pair_logit = self.model(ids, attn, mk, mkm, ex)
             lp = torch.log_softmax(logits.float(), dim=-1).cpu().numpy()
             pl = (pair_logit.float().cpu().numpy()
                   if pair_logit is not None else None)
