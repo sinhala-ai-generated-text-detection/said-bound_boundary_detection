@@ -4,11 +4,18 @@ Follows exactly the protocol used for the linear models so the numbers are
 comparable: train on `train`, select on `dev` restricted to seen generators,
 report on `test` split into seen vs held-out.
 
-The decision threshold is tuned on dev-seen as well. Leaving it at 0.5 is an
-arbitrary choice on an imbalanced task, and tuning it on the held-out portion
-of dev would leak the generalisation signal being measured.
+Two decoders are compared, and both are tuned on dev-seen only:
 
-    python src/detect/run_transformer.py --epochs 4
+* **threshold** - independent per-sentence decisions at a tuned probability
+  cut. Tuned for sentence F1, which is what a per-sentence head optimises.
+* **viterbi** - structured decode combining the sentence head with the pair
+  head's transition scores. Tuned for *exact-boundary F1*, because that is the
+  metric the task is actually scored on. Tuning a threshold for sentence F1 and
+  then reporting boundary F1 optimises the wrong objective, which is the main
+  thing this runner fixes.
+
+    python src/detect/run_transformer.py --epochs 12 --lr 3e-5 --grad-accum 1
+    python src/detect/run_transformer.py --no-pair-head    # ablation
 """
 from __future__ import annotations
 
@@ -24,21 +31,36 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from data import load_dataset, describe, role_map  # noqa: E402
-from metrics import evaluate, sentence_metrics  # noqa: E402
+from metrics import boundary_metrics, evaluate, sentence_metrics  # noqa: E402
 from utils import force_utf8_stdout, load_config  # noqa: E402
 
 
-def predict_at(model, ds, threshold: float):
-    proba = model.predict_proba(ds.docs)
-    return (proba >= threshold).astype(int).tolist(), proba
-
-
-def eval_ds(model, ds, threshold: float) -> dict:
+# ------------------------------------------------------------- evaluation ---
+def eval_threshold(model, ds, threshold: float) -> dict:
     if len(ds) == 0:
         return {}
     S, Y, D, I = ds.sentence_view()
-    pred, _ = predict_at(model, ds, threshold)
+    proba = model.predict_proba(ds.docs)
+    pred = (proba >= threshold).astype(int).tolist()
     return evaluate(ds.docs, Y, pred, D)
+
+
+def eval_viterbi(model, ds, bias: float) -> dict:
+    if len(ds) == 0:
+        return {}
+    S, Y, D, I = ds.sentence_view()
+    pred = model.predict_viterbi(ds.docs, boundary_bias=bias)
+    return evaluate(ds.docs, Y, pred, D)
+
+
+def _bound_f1(docs, pred) -> float:
+    """Exact-boundary F1 for a flat prediction over `docs`."""
+    per_doc, i = [], 0
+    for d in docs:
+        per_doc.append([int(v) for v in pred[i:i + d.n]])
+        i += d.n
+    gold = [list(d.labels) for d in docs]
+    return boundary_metrics(gold, per_doc, 0).f1
 
 
 def main() -> None:
@@ -46,11 +68,18 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--model", default="xlm-roberta-base")
-    ap.add_argument("--epochs", type=int, default=4)
-    ap.add_argument("--lr", type=float, default=2e-5)
+    ap.add_argument("--epochs", type=int, default=12)
+    ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--batch-size", type=int, default=4)
-    ap.add_argument("--grad-accum", type=int, default=4)
+    ap.add_argument("--grad-accum", type=int, default=1)
     ap.add_argument("--max-length", type=int, default=512)
+    ap.add_argument("--pair-loss-weight", type=float, default=1.0)
+    ap.add_argument("--pair-pos-weight", type=float, default=2.0)
+    ap.add_argument("--pair-head", action="store_true",
+                    help="EXPERIMENTAL. Adds a boundary head to the training "
+                         "objective. On the 20%% slice this stalled training "
+                         "(loss flat near 1.66, dev score frozen), so it is "
+                         "off by default; Viterbi decoding does not need it.")
     ap.add_argument("--no-fp16", action="store_true")
     ap.add_argument("--cpu", action="store_true")
     ap.add_argument("--save-to", default="models/xlmr_tagger")
@@ -62,10 +91,10 @@ def main() -> None:
     from transformer import TransformerDetector
 
     print("=" * 70)
-    print(f"torch {torch.__version__}  cuda_available={torch.cuda.is_available()}")
+    print(f"torch {torch.__version__}  cuda={torch.cuda.is_available()}")
     if torch.cuda.is_available():
         p = torch.cuda.get_device_properties(0)
-        print(f"gpu: {p.name}  {p.total_memory / 1e9:.1f} GB  sm_{p.major}{p.minor}")
+        print(f"gpu: {p.name}  {p.total_memory / 1e9:.1f} GB")
     print("=" * 70)
 
     cfg = load_config(a.config)
@@ -79,82 +108,136 @@ def main() -> None:
     describe(dev_seen, cfg, "dev (seen only)")
     describe(test, cfg, "test")
 
-    # Weight the AI class by inverse frequency so the minority class is not
-    # simply ignored by the loss.
     tot = train.n_sentences
     ai = sum(sum(d.labels) for d in train.docs)
-    w_h = tot / (2 * (tot - ai))
-    w_ai = tot / (2 * ai)
+    w_h, w_ai = tot / (2 * (tot - ai)), tot / (2 * ai)
     print(f"\nclass weights: human={w_h:.3f} ai={w_ai:.3f}")
 
+    use_pair = a.pair_head
     det = TransformerDetector(
         model_name=a.model, epochs=a.epochs, lr=a.lr,
         batch_size=a.batch_size, grad_accum=a.grad_accum,
         max_length=a.max_length, fp16=not a.no_fp16,
-        class_weight=[w_h, w_ai], seed=cfg["seed"])
+        class_weight=[w_h, w_ai], seed=cfg["seed"],
+        use_pair_head=use_pair, pair_loss_weight=a.pair_loss_weight,
+        pair_pos_weight=a.pair_pos_weight)
     if a.cpu:
-        import torch as _t
-        det.device = _t.device("cpu")
+        det.device = torch.device("cpu")
         det.fp16 = False
 
-    def dev_probe(m):
-        S, Y, D, I = dev_seen.sentence_view()
-        pred, _ = predict_at(m, dev_seen, 0.5)
-        return sentence_metrics(Y, pred).f1_ai
+    Sd, Yd, Dd, Id = dev_seen.sentence_view()
 
-    print(f"\nfine-tuning {a.model} ...")
+    BIAS_GRID = np.arange(-4.0, 4.01, 0.25)
+
+    def best_bias_on(docs, raw=None):
+        """Best (bias, exact-boundary F1) on `docs`, sweeping over cached scores.
+
+        The sweep matters: Viterbi at an arbitrary fixed bias is not the
+        operating point. If the pair head settles on a low change-probability,
+        decoding at bias 0 emits no boundaries at all and scores exactly zero,
+        which would make epoch selection blind to a model that is in fact fine
+        once the bias is set. Scoring is done on cached scores, so the whole
+        sweep costs one forward pass.
+        """
+        raw = raw if raw is not None else det._raw(docs)
+        best = (0.0, -1.0)
+        for b in BIAS_GRID:
+            from transformer import viterbi_decode
+            pred = []
+            for (L, P) in raw:
+                pred.extend(viterbi_decode(L, P, float(b)))
+            f1 = _bound_f1(docs, pred)
+            if f1 > best[1]:
+                best = (float(b), f1)
+        return best
+
+    def dev_probe(m):
+        """Model selection signal: exact-boundary F1 at its best bias.
+
+        Selecting the epoch on sentence F1 while reporting boundary F1 would
+        optimise the wrong thing, so selection uses the reported metric.
+        """
+        return best_bias_on(dev_seen.docs)[1]
+
+    print(f"\nfine-tuning {a.model} "
+          f"({'pair head + viterbi' if use_pair else 'sentence head only'}) ...")
     t0 = time.time()
     det.fit(train.docs, dev_docs=dev_seen.docs, eval_fn=dev_probe)
     train_secs = time.time() - t0
     print(f"training took {train_secs / 60:.1f} min")
 
-    # ---- threshold selection on dev-seen only ---------------------------
-    Sd, Yd, Dd, Id = dev_seen.sentence_view()
-    _, dev_proba = predict_at(det, dev_seen, 0.5)
-    best_t, best_f1 = 0.5, -1.0
+    # ---- threshold tuned on dev-seen for sentence F1 --------------------
+    dev_proba = det.predict_proba(dev_seen.docs)
+    best_t, best_tf1 = 0.5, -1.0
     for t in np.arange(0.20, 0.81, 0.025):
         f1 = sentence_metrics(Yd, (dev_proba >= t).astype(int).tolist()).f1_ai
-        if f1 > best_f1:
-            best_t, best_f1 = float(t), f1
-    print(f"\nthreshold tuned on dev-seen: {best_t:.3f} (dev F1(AI)={best_f1:.4f})")
+        if f1 > best_tf1:
+            best_t, best_tf1 = float(t), f1
+    print(f"\nthreshold tuned on dev-seen: {best_t:.3f} "
+          f"(dev sentence F1={best_tf1:.4f})")
 
-    # ---- test evaluation ------------------------------------------------
+    # ---- viterbi bias tuned on dev-seen for EXACT-BOUNDARY F1 -----------
+    best_b, best_bf1 = best_bias_on(dev_seen.docs)
+    det.boundary_bias = best_b
+    kind = "learned pair transitions" if use_pair else "constant transition"
+    print(f"viterbi bias tuned on dev-seen ({kind}): {best_b:+.2f} "
+          f"(dev boundary F1={best_bf1:.4f})")
+
+    # ---- test -----------------------------------------------------------
     seen = test.filter(roles=["seen"], role_map=rm)
     held = test.filter(roles=["held_out"], role_map=rm)
-    res = {
-        "overall": eval_ds(det, test, best_t),
-        "seen": eval_ds(det, seen, best_t),
-        "held_out": eval_ds(det, held, best_t),
-    }
-    print("\n=== TEST ===")
-    for k, v in res.items():
-        print(f"  {k:9s} F1(AI)={v['sentence']['f1_ai']:.3f}  "
-              f"acc={v['sentence']['accuracy']:.3f}  "
-              f"bound_exact={v['boundary_exact']['f1']:.3f}  "
-              f"bound±1={v['boundary_tol']['f1']:.3f}")
 
-    per_gen = {}
+    res_thr = {k: eval_threshold(det, d, best_t)
+               for k, d in (("overall", test), ("seen", seen), ("held_out", held))}
+    res_vit = {k: eval_viterbi(det, d, best_b)
+               for k, d in (("overall", test), ("seen", seen),
+                            ("held_out", held))}
+
+    print("\n=== TEST: threshold decoding ===")
+    for k, v in res_thr.items():
+        print(f"  {k:9s} F1={v['sentence']['f1_ai']:.3f} "
+              f"acc={v['sentence']['accuracy']:.3f} "
+              f"bE={v['boundary_exact']['f1']:.3f} "
+              f"b1={v['boundary_tol']['f1']:.3f}")
+    print(f"=== TEST: viterbi decoding ({kind}) ===")
+    if True:
+        for k, v in res_vit.items():
+            print(f"  {k:9s} F1={v['sentence']['f1_ai']:.3f} "
+                  f"acc={v['sentence']['accuracy']:.3f} "
+                  f"bE={v['boundary_exact']['f1']:.3f} "
+                  f"b1={v['boundary_tol']['f1']:.3f}")
+
+    # The headline decoder is the one tuned on the reported metric.
+    primary = res_vit
+
+    per_gen, per_type = {}, {}
+    ev = (lambda d: eval_viterbi(det, d, best_b)) if use_pair else \
+         (lambda d: eval_threshold(det, d, best_t))
+    print()
     for g in sorted({d.generator for d in test.docs}):
         sub = test.filter(generators=[g])
-        per_gen[g] = {"role": rm.get(g), "n_docs": len(sub),
-                      **eval_ds(det, sub, best_t)}
-        print(f"  {g:18s}[{rm.get(g):8s}] F1(AI)="
-              f"{per_gen[g]['sentence']['f1_ai']:.3f}  bound_exact="
-              f"{per_gen[g]['boundary_exact']['f1']:.3f}")
-    per_type = {}
+        per_gen[g] = {"role": rm.get(g), "n_docs": len(sub), **ev(sub)}
+        print(f"  {g:18s}[{rm.get(g):8s}] F1={per_gen[g]['sentence']['f1_ai']:.3f} "
+              f"bE={per_gen[g]['boundary_exact']['f1']:.3f}")
     for t in sorted({d.construction_type for d in test.docs}):
         sub = test.filter(construction_type=t)
-        per_type[t] = {"n_docs": len(sub), **eval_ds(det, sub, best_t)}
-        print(f"  {t:36s} F1(AI)={per_type[t]['sentence']['f1_ai']:.3f}  "
-              f"bound_exact={per_type[t]['boundary_exact']['f1']:.3f}")
+        per_type[t] = {"n_docs": len(sub), **ev(sub)}
+        print(f"  {t:36s} F1={per_type[t]['sentence']['f1_ai']:.3f} "
+              f"bE={per_type[t]['boundary_exact']['f1']:.3f}")
 
     payload = {
-        "model": a.model,
-        "epochs": a.epochs, "lr": a.lr, "batch_size": a.batch_size,
-        "grad_accum": a.grad_accum, "threshold": best_t,
+        "model": a.model, "epochs": a.epochs, "lr": a.lr,
+        "batch_size": a.batch_size, "grad_accum": a.grad_accum,
+        "use_pair_head": use_pair,
+        "pair_loss_weight": a.pair_loss_weight,
+        "pair_pos_weight": a.pair_pos_weight,
+        "threshold": best_t, "boundary_bias": best_b,
+        "best_epoch": det.best_epoch, "best_dev_score": det.best_score,
         "train_minutes": train_secs / 60,
-        "dataset": {"train": len(train), "dev": len(dev), "test": len(test)},
-        "test": res, "per_generator": per_gen, "per_construction_type": per_type,
+        "dataset": {"train": len(train), "dev": len(dev), "test": len(test),
+                    "sentences": ds.n_sentences, "docs": len(ds)},
+        "test": primary, "test_threshold": res_thr, "test_viterbi": res_vit,
+        "per_generator": per_gen, "per_construction_type": per_type,
     }
     Path(a.json_out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.json_out).write_text(json.dumps(payload, indent=2, ensure_ascii=False),
@@ -170,38 +253,76 @@ def write_report(path: Path, p: dict) -> None:
     lin_path = Path("reports/detector_results.json")
     lin = json.loads(lin_path.read_text(encoding="utf-8")) if lin_path.exists() else None
 
+    def row(label, m):
+        s, b0, bt = m["sentence"], m["boundary_exact"], m["boundary_tol"]
+        return (f"| {label} | {s['accuracy']:.3f} | {s['f1_ai']:.3f} | "
+                f"{s['precision_ai']:.3f} | {s['recall_ai']:.3f} | "
+                f"{b0['f1']:.3f} | {bt['f1']:.3f} | "
+                f"{b0['exact_doc_match']:.3f} |")
+
+    HDR = ("| slice | sent acc | sent F1(AI) | P(AI) | R(AI) | "
+           "bound F1 exact | bound F1 ±1 | doc exact |")
+    DIV = "|---|---|---|---|---|---|---|---|"
+
     L = ["# Transformer detector — XLM-RoBERTa sentence tagger", ""]
-    L.append(f"`{p['model']}` fine-tuned for per-sentence human/AI tagging, "
+    L.append(f"`{p['model']}` fine-tuned for per-sentence human/AI tagging: "
              f"{p['epochs']} epochs, lr {p['lr']}, effective batch "
-             f"{p['batch_size'] * p['grad_accum']}, "
-             f"{p['train_minutes']:.1f} min on GPU.")
+             f"{p['batch_size'] * p['grad_accum']}, best epoch "
+             f"{p['best_epoch']}, {p['train_minutes']:.1f} min on GPU. "
+             f"Trained on {p['dataset']['train']} documents.")
     L.append("")
     L.append("The whole document is encoded in one pass with a marker token "
-             "before each sentence; the marker's hidden state is classified. "
-             "This is the point of the model: unlike the linear baseline, each "
-             "sentence representation is built with its neighbours in "
-             "attention range, so the model can represent discontinuity rather "
-             "than judging sentences in isolation.")
+             "before each sentence, so each sentence representation is built "
+             "with its neighbours in attention range.")
     L.append("")
-    L.append(f"Decision threshold {p['threshold']:.3f}, tuned on dev "
-             "restricted to seen generators — the same protocol as the linear "
-             "models, so the held-out number stays an honest generalisation "
-             "estimate.")
+    if not p["use_pair_head"]:
+        L.append("**Structured decoding.** Decoding is a Viterbi pass over the "
+                 "sentence scores with a single transition cost for changing "
+                 "author, tuned on dev-seen for **exact-boundary F1**. This is "
+                 "a linear-chain CRF decode with a constant transition. It "
+                 "matters because the previous setup tuned a per-sentence "
+                 "threshold for *sentence* F1 and then reported *boundary* F1 "
+                 "- optimising a different objective from the one reported. "
+                 "Unlike run-length smoothing it never forbids a "
+                 "one-sentence span; it only makes one cost two transitions.")
+        L.append("")
+        L.append(f"Threshold {p['threshold']:.3f} (sentence F1) and boundary "
+                 f"bias {p['boundary_bias']:+.2f} (exact-boundary F1), both "
+                 f"tuned on dev restricted to seen generators.")
+    else:
+        L.append("**Pair head + structured decoding.** A second head scores "
+                 "each adjacent sentence pair for *change of author*, from "
+                 "`[left; right; |left−right|; left·right]`. Decoding is a "
+                 "Viterbi pass combining the sentence scores with those "
+                 "pair-wise transitions — a linear-chain CRF whose transition "
+                 "costs are input-dependent. Unlike run-length smoothing, it "
+                 "never forbids a one-sentence span; it only makes one cost "
+                 "two changes instead of one.")
+        L.append("")
+        L.append(f"Decoding parameters, both tuned on dev restricted to seen "
+                 f"generators: threshold {p['threshold']:.3f} (for sentence "
+                 f"F1) and boundary bias {p['boundary_bias']:+.2f} (for "
+                 f"**exact-boundary F1**). Tuning the cut for sentence F1 and "
+                 f"then reporting boundary F1 optimises the wrong objective.")
     L.append("")
+
     L.append("## Test results")
     L.append("")
-    L.append("| slice | sent acc | sent F1(AI) | P(AI) | R(AI) | "
-             "bound F1 exact | bound F1 ±1 | doc exact |")
-    L.append("|---|---|---|---|---|---|---|---|")
+    L.append(HDR)
+    L.append(DIV)
     for k, lbl in (("overall", "overall"), ("seen", "seen generators"),
                    ("held_out", "held-out (Gemini)")):
-        m = p["test"][k]
-        s, b0, bt = m["sentence"], m["boundary_exact"], m["boundary_tol"]
-        L.append(f"| {lbl} | {s['accuracy']:.3f} | {s['f1_ai']:.3f} | "
-                 f"{s['precision_ai']:.3f} | {s['recall_ai']:.3f} | "
-                 f"{b0['f1']:.3f} | {bt['f1']:.3f} | "
-                 f"{b0['exact_doc_match']:.3f} |")
+        L.append(row(lbl, p["test"][k]))
     L.append("")
+
+    if p.get("test_viterbi"):
+        L.append("### Decoder comparison (overall test)")
+        L.append("")
+        L.append(HDR)
+        L.append(DIV)
+        L.append(row("threshold (per-sentence)", p["test_threshold"]["overall"]))
+        L.append(row("**viterbi (pair head)**", p["test_viterbi"]["overall"]))
+        L.append("")
 
     if lin:
         L.append("## Versus the linear baselines")
@@ -220,11 +341,6 @@ def write_report(path: Path, p: dict) -> None:
                  f"**{t['overall']['sentence']['f1_ai']:.3f}** | "
                  f"**{t['overall']['boundary_exact']['f1']:.3f}** | "
                  f"**{t['held_out']['sentence']['f1_ai']:.3f}** |")
-        L.append("")
-        L.append("The row that matters is **bound F1 exact**: it is the only "
-                 "column the trivial baselines cannot game. `all-AI` scores "
-                 "0.000 there by predicting no boundaries at all, and the ±1 "
-                 "column rewards scattering boundaries liberally.")
         L.append("")
 
     L.append("## By generator")

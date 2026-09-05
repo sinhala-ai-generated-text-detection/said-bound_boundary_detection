@@ -33,6 +33,17 @@ class OpenRouterError(RuntimeError):
     pass
 
 
+class InsufficientCredits(OpenRouterError):
+    """HTTP 402. The account cannot pay for the request.
+
+    Separated from other 4xx because it is not a property of the request: every
+    subsequent call will fail the same way. A run that treats it as a generic
+    API error keeps going and burns thousands of guaranteed-failing calls, which
+    is exactly what happened once here - 1,964 of them - and it buries the real
+    cause under a generic error count.
+    """
+
+
 class MissingAPIKey(OpenRouterError):
     pass
 
@@ -244,6 +255,10 @@ class OpenRouterClient:
                 retry_after = resp.headers.get("Retry-After")
                 self._sleep_backoff(attempt, retry_after)
                 continue
+
+            if resp.status_code == 402:
+                raise InsufficientCredits(
+                    f"HTTP 402 out of credits: {resp.text[:300]}")
 
             if resp.status_code >= 400:
                 raise OpenRouterError(

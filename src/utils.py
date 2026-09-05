@@ -5,6 +5,7 @@ import json
 import os
 import random
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -31,10 +32,15 @@ def read_jsonl(path: str | Path) -> Iterator[dict]:
     if not p.exists():
         return
     with p.open("r", encoding="utf-8") as fh:
-        for line in fh:
+        for lineno, line in enumerate(fh, 1):
             line = line.strip()
-            if line:
+            if not line:
+                continue
+            try:
                 yield json.loads(line)
+            except json.JSONDecodeError:
+                # A torn line should not make an entire log unreadable.
+                print(f"  WARN {p}:{lineno} unparseable, skipped")
 
 
 def write_jsonl(path: str | Path, rows: Iterable[dict], mode: str = "w") -> int:

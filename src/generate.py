@@ -29,7 +29,12 @@ from typing import Any, Callable
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from openrouter import MissingAPIKey, OpenRouterClient, OpenRouterError  # noqa: E402
+from openrouter import (  # noqa: E402
+    InsufficientCredits,
+    MissingAPIKey,
+    OpenRouterClient,
+    OpenRouterError,
+)
 from segment import segment_sentences, word_count  # noqa: E402
 from split import load_split_map  # noqa: E402
 from utils import (  # noqa: E402
@@ -299,6 +304,10 @@ class Generator:
                     # Vary the seed per attempt so a retry is a fresh sample.
                     seed=self.cfg["seed"] + attempt * 1000,
                 )
+            except InsufficientCredits:
+                # Not recoverable and not request-specific: stop the run rather
+                # than issue thousands more calls that cannot succeed.
+                raise
             except OpenRouterError as e:
                 errors = [f"api_error: {e}"]
                 self._bump("api_errors")
