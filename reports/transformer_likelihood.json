@@ -1,0 +1,508 @@
+{
+  "model": "xlm-roberta-base",
+  "epochs": 8,
+  "lr": 3e-05,
+  "batch_size": 4,
+  "grad_accum": 1,
+  "use_pair_head": false,
+  "likelihood_features": true,
+  "feat_dim": 14,
+  "pair_loss_weight": 1.0,
+  "pair_pos_weight": 2.0,
+  "threshold": 0.6749999999999998,
+  "boundary_bias": 1.0,
+  "best_epoch": 4,
+  "best_dev_score": 0.6450523471800068,
+  "train_minutes": 44.02418347597122,
+  "dataset": {
+    "train": 2490,
+    "dev": 836,
+    "test": 918,
+    "sentences": 39358,
+    "docs": 4244
+  },
+  "test": {
+    "overall": {
+      "sentence": {
+        "n": 8455,
+        "accuracy": 0.8316972205795388,
+        "precision_ai": 0.7474863544958346,
+        "recall_ai": 0.8270820089001907,
+        "f1_ai": 0.7852723706051004,
+        "macro_f1": 0.8234443152257244,
+        "support_ai": 3146
+      },
+      "boundary_exact": {
+        "n_docs": 918,
+        "gold": 2228,
+        "pred": 2887,
+        "precision": 0.5375822653273294,
+        "recall": 0.696588868940754,
+        "f1": 0.6068426197458455,
+        "exact_doc_match": 0.3017429193899782,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 918,
+        "gold": 2228,
+        "pred": 2887,
+        "precision": 0.6653966054728091,
+        "recall": 0.8622082585278277,
+        "f1": 0.7511241446725317,
+        "exact_doc_match": 0.3017429193899782,
+        "tolerance": 1
+      }
+    },
+    "seen": {
+      "sentence": {
+        "n": 5624,
+        "accuracy": 0.846728307254623,
+        "precision_ai": 0.7612065354000838,
+        "recall_ai": 0.8615457562825984,
+        "f1_ai": 0.8082740213523132,
+        "macro_f1": 0.840304072287531,
+        "support_ai": 2109
+      },
+      "boundary_exact": {
+        "n_docs": 613,
+        "gold": 1479,
+        "pred": 1850,
+        "precision": 0.5664864864864865,
+        "recall": 0.7085868830290737,
+        "f1": 0.6296185040552719,
+        "exact_doc_match": 0.3621533442088091,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 613,
+        "gold": 1479,
+        "pred": 1850,
+        "precision": 0.687027027027027,
+        "recall": 0.8593644354293442,
+        "f1": 0.763592670471613,
+        "exact_doc_match": 0.3621533442088091,
+        "tolerance": 1
+      }
+    },
+    "held_out": {
+      "sentence": {
+        "n": 2831,
+        "accuracy": 0.8018368067820558,
+        "precision_ai": 0.7175502742230347,
+        "recall_ai": 0.7569913211186113,
+        "f1_ai": 0.7367433129985922,
+        "macro_f1": 0.7889324041628475,
+        "support_ai": 1037
+      },
+      "boundary_exact": {
+        "n_docs": 305,
+        "gold": 749,
+        "pred": 1037,
+        "precision": 0.48601735776277727,
+        "recall": 0.6728971962616822,
+        "f1": 0.5643896976483763,
+        "exact_doc_match": 0.18032786885245902,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 305,
+        "gold": 749,
+        "pred": 1037,
+        "precision": 0.626808100289296,
+        "recall": 0.8678237650200267,
+        "f1": 0.7278835386338185,
+        "exact_doc_match": 0.18032786885245902,
+        "tolerance": 1
+      }
+    }
+  },
+  "test_threshold": {
+    "overall": {
+      "sentence": {
+        "n": 8455,
+        "accuracy": 0.8404494382022472,
+        "precision_ai": 0.7864201466369143,
+        "recall_ai": 0.784170375079466,
+        "f1_ai": 0.7852936495304791,
+        "macro_f1": 0.8291764191945235,
+        "support_ai": 3146
+      },
+      "boundary_exact": {
+        "n_docs": 918,
+        "gold": 2228,
+        "pred": 2097,
+        "precision": 0.6056270863137816,
+        "recall": 0.5700179533213644,
+        "f1": 0.5872832369942196,
+        "exact_doc_match": 0.34967320261437906,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 918,
+        "gold": 2228,
+        "pred": 2097,
+        "precision": 0.7720553171196948,
+        "recall": 0.7266606822262118,
+        "f1": 0.7486705202312138,
+        "exact_doc_match": 0.34967320261437906,
+        "tolerance": 1
+      }
+    },
+    "seen": {
+      "sentence": {
+        "n": 5624,
+        "accuracy": 0.8570412517780939,
+        "precision_ai": 0.7975376196990424,
+        "recall_ai": 0.829302987197724,
+        "f1_ai": 0.8131101813110181,
+        "macro_f1": 0.8486800546635713,
+        "support_ai": 2109
+      },
+      "boundary_exact": {
+        "n_docs": 613,
+        "gold": 1479,
+        "pred": 1347,
+        "precision": 0.6451373422420194,
+        "recall": 0.5875591615956728,
+        "f1": 0.6150035385704176,
+        "exact_doc_match": 0.41272430668841764,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 613,
+        "gold": 1479,
+        "pred": 1347,
+        "precision": 0.8054936896807721,
+        "recall": 0.7336037863421231,
+        "f1": 0.767869780608634,
+        "exact_doc_match": 0.41272430668841764,
+        "tolerance": 1
+      }
+    },
+    "held_out": {
+      "sentence": {
+        "n": 2831,
+        "accuracy": 0.8074885199576122,
+        "precision_ai": 0.760593220338983,
+        "recall_ai": 0.6923818707810994,
+        "f1_ai": 0.7248864209994951,
+        "macro_f1": 0.7884144139770635,
+        "support_ai": 1037
+      },
+      "boundary_exact": {
+        "n_docs": 305,
+        "gold": 749,
+        "pred": 750,
+        "precision": 0.5346666666666666,
+        "recall": 0.5353805073431241,
+        "f1": 0.5350233488992662,
+        "exact_doc_match": 0.22295081967213115,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 305,
+        "gold": 749,
+        "pred": 750,
+        "precision": 0.712,
+        "recall": 0.7129506008010681,
+        "f1": 0.7124749833222148,
+        "exact_doc_match": 0.22295081967213115,
+        "tolerance": 1
+      }
+    }
+  },
+  "test_viterbi": {
+    "overall": {
+      "sentence": {
+        "n": 8455,
+        "accuracy": 0.8316972205795388,
+        "precision_ai": 0.7474863544958346,
+        "recall_ai": 0.8270820089001907,
+        "f1_ai": 0.7852723706051004,
+        "macro_f1": 0.8234443152257244,
+        "support_ai": 3146
+      },
+      "boundary_exact": {
+        "n_docs": 918,
+        "gold": 2228,
+        "pred": 2887,
+        "precision": 0.5375822653273294,
+        "recall": 0.696588868940754,
+        "f1": 0.6068426197458455,
+        "exact_doc_match": 0.3017429193899782,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 918,
+        "gold": 2228,
+        "pred": 2887,
+        "precision": 0.6653966054728091,
+        "recall": 0.8622082585278277,
+        "f1": 0.7511241446725317,
+        "exact_doc_match": 0.3017429193899782,
+        "tolerance": 1
+      }
+    },
+    "seen": {
+      "sentence": {
+        "n": 5624,
+        "accuracy": 0.846728307254623,
+        "precision_ai": 0.7612065354000838,
+        "recall_ai": 0.8615457562825984,
+        "f1_ai": 0.8082740213523132,
+        "macro_f1": 0.840304072287531,
+        "support_ai": 2109
+      },
+      "boundary_exact": {
+        "n_docs": 613,
+        "gold": 1479,
+        "pred": 1850,
+        "precision": 0.5664864864864865,
+        "recall": 0.7085868830290737,
+        "f1": 0.6296185040552719,
+        "exact_doc_match": 0.3621533442088091,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 613,
+        "gold": 1479,
+        "pred": 1850,
+        "precision": 0.687027027027027,
+        "recall": 0.8593644354293442,
+        "f1": 0.763592670471613,
+        "exact_doc_match": 0.3621533442088091,
+        "tolerance": 1
+      }
+    },
+    "held_out": {
+      "sentence": {
+        "n": 2831,
+        "accuracy": 0.8018368067820558,
+        "precision_ai": 0.7175502742230347,
+        "recall_ai": 0.7569913211186113,
+        "f1_ai": 0.7367433129985922,
+        "macro_f1": 0.7889324041628475,
+        "support_ai": 1037
+      },
+      "boundary_exact": {
+        "n_docs": 305,
+        "gold": 749,
+        "pred": 1037,
+        "precision": 0.48601735776277727,
+        "recall": 0.6728971962616822,
+        "f1": 0.5643896976483763,
+        "exact_doc_match": 0.18032786885245902,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 305,
+        "gold": 749,
+        "pred": 1037,
+        "precision": 0.626808100289296,
+        "recall": 0.8678237650200267,
+        "f1": 0.7278835386338185,
+        "exact_doc_match": 0.18032786885245902,
+        "tolerance": 1
+      }
+    }
+  },
+  "per_generator": {
+    "deepseek_v3": {
+      "role": "seen",
+      "n_docs": 302,
+      "sentence": {
+        "n": 2762,
+        "accuracy": 0.8475742215785662,
+        "precision_ai": 0.7871333964049196,
+        "recall_ai": 0.8093385214007782,
+        "f1_ai": 0.7980815347721822,
+        "macro_f1": 0.8378311134169141,
+        "support_ai": 1028
+      },
+      "boundary_exact": {
+        "n_docs": 302,
+        "gold": 758,
+        "pred": 666,
+        "precision": 0.6471471471471472,
+        "recall": 0.5686015831134564,
+        "f1": 0.6053370786516854,
+        "exact_doc_match": 0.40728476821192056,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 302,
+        "gold": 758,
+        "pred": 666,
+        "precision": 0.8018018018018018,
+        "recall": 0.7044854881266491,
+        "f1": 0.7500000000000001,
+        "exact_doc_match": 0.40728476821192056,
+        "tolerance": 1
+      }
+    },
+    "gemini_2_5_pro": {
+      "role": "held_out",
+      "n_docs": 305,
+      "sentence": {
+        "n": 2831,
+        "accuracy": 0.8074885199576122,
+        "precision_ai": 0.760593220338983,
+        "recall_ai": 0.6923818707810994,
+        "f1_ai": 0.7248864209994951,
+        "macro_f1": 0.7884144139770635,
+        "support_ai": 1037
+      },
+      "boundary_exact": {
+        "n_docs": 305,
+        "gold": 749,
+        "pred": 750,
+        "precision": 0.5346666666666666,
+        "recall": 0.5353805073431241,
+        "f1": 0.5350233488992662,
+        "exact_doc_match": 0.22295081967213115,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 305,
+        "gold": 749,
+        "pred": 750,
+        "precision": 0.712,
+        "recall": 0.7129506008010681,
+        "f1": 0.7124749833222148,
+        "exact_doc_match": 0.22295081967213115,
+        "tolerance": 1
+      }
+    },
+    "gpt_4o": {
+      "role": "seen",
+      "n_docs": 311,
+      "sentence": {
+        "n": 2862,
+        "accuracy": 0.86617749825297,
+        "precision_ai": 0.8072183098591549,
+        "recall_ai": 0.8482886216466234,
+        "f1_ai": 0.8272440234551196,
+        "macro_f1": 0.8590169361644004,
+        "support_ai": 1081
+      },
+      "boundary_exact": {
+        "n_docs": 311,
+        "gold": 721,
+        "pred": 681,
+        "precision": 0.6431718061674009,
+        "recall": 0.6074895977808599,
+        "f1": 0.6248216833095578,
+        "exact_doc_match": 0.4180064308681672,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 311,
+        "gold": 721,
+        "pred": 681,
+        "precision": 0.8091042584434655,
+        "recall": 0.7642163661581137,
+        "f1": 0.7860199714693294,
+        "exact_doc_match": 0.4180064308681672,
+        "tolerance": 1
+      }
+    }
+  },
+  "per_construction_type": {
+    "type1_single_boundary": {
+      "n_docs": 368,
+      "sentence": {
+        "n": 3320,
+        "accuracy": 0.9183734939759036,
+        "precision_ai": 0.9520153550863724,
+        "recall_ai": 0.8836104513064132,
+        "f1_ai": 0.9165383430859254,
+        "macro_f1": 0.9183340109181468,
+        "support_ai": 1684
+      },
+      "boundary_exact": {
+        "n_docs": 368,
+        "gold": 368,
+        "pred": 497,
+        "precision": 0.5372233400402414,
+        "recall": 0.7255434782608695,
+        "f1": 0.6173410404624277,
+        "exact_doc_match": 0.6005434782608695,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 368,
+        "gold": 368,
+        "pred": 497,
+        "precision": 0.682092555331992,
+        "recall": 0.9211956521739131,
+        "f1": 0.7838150289017343,
+        "exact_doc_match": 0.6005434782608695,
+        "tolerance": 1
+      }
+    },
+    "type2_single_internal_segment": {
+      "n_docs": 299,
+      "sentence": {
+        "n": 2671,
+        "accuracy": 0.8199176338450018,
+        "precision_ai": 0.6091370558375635,
+        "recall_ai": 0.7350689127105666,
+        "f1_ai": 0.6662040249826509,
+        "macro_f1": 0.7714511537371598,
+        "support_ai": 653
+      },
+      "boundary_exact": {
+        "n_docs": 299,
+        "gold": 598,
+        "pred": 758,
+        "precision": 0.5,
+        "recall": 0.6337792642140468,
+        "f1": 0.5589970501474927,
+        "exact_doc_match": 0.27424749163879597,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 299,
+        "gold": 598,
+        "pred": 758,
+        "precision": 0.6846965699208444,
+        "recall": 0.8678929765886287,
+        "f1": 0.7654867256637169,
+        "exact_doc_match": 0.27424749163879597,
+        "tolerance": 1
+      }
+    },
+    "type3_multiple_internal_segments": {
+      "n_docs": 251,
+      "sentence": {
+        "n": 2464,
+        "accuracy": 0.757711038961039,
+        "precision_ai": 0.6348600508905853,
+        "recall_ai": 0.6168108776266996,
+        "f1_ai": 0.625705329153605,
+        "macro_f1": 0.7232937086812129,
+        "support_ai": 809
+      },
+      "boundary_exact": {
+        "n_docs": 251,
+        "gold": 1262,
+        "pred": 842,
+        "precision": 0.7410926365795725,
+        "recall": 0.49445324881141045,
+        "f1": 0.5931558935361216,
+        "exact_doc_match": 0.07171314741035857,
+        "tolerance": 0
+      },
+      "boundary_tol": {
+        "n_docs": 251,
+        "gold": 1262,
+        "pred": 842,
+        "precision": 0.9038004750593824,
+        "recall": 0.6030110935023771,
+        "f1": 0.723384030418251,
+        "exact_doc_match": 0.07171314741035857,
+        "tolerance": 1
+      }
+    }
+  }
+}
