@@ -8,7 +8,6 @@ Everything here is dataset-description material only. No detector results.
 |---|---|
 | `said_abd_sections.tex` | 8 numbered blocks to paste into `main.tex` |
 | `said_abd_prompts.tex` | prompts appendix — `\input` it |
-| `said_abd_refs.bib` | extra references (only 2 are really needed) |
 | `figures/abd_fig1_constructions.pdf` | the three construction types |
 | `figures/abd_fig2_positions.pdf` | boundary positions + machine share |
 
@@ -35,8 +34,11 @@ Everything here is dataset-description material only. No detector results.
    Blocks [7] and [8] use `\si{...}`. Swap the font name for one installed on
    your build machine (`Iskoola Pota` on Windows).
 9. Appendix: `\input{said_abd_prompts}` after `said_user_prompts`.
-10. Bibliography: add `said_abd_refs` to your `\bibliography{...}` list if you
-    cite any of it.
+10. **No bibliography changes.** The ABD sections cite nothing, so there is
+    nothing to add to `\bibliography{...}`. An earlier draft of this bundle
+    shipped a `said_abd_refs.bib`; it was removed because three of its four
+    entries duplicated keys already in your `.bib` files, which would cause
+    BibTeX repeated-entry errors for no benefit.
 
 ## Length
 
