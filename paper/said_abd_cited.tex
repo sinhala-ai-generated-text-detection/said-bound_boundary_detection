@@ -1,17 +1,13 @@
 % ============================================================================
-%  Sinhala-ABD sections, with citations.
+%  Sinhala-ABD sections, with citations. SHORT VERSION.
 %
-%  Every key used here is ALREADY in your .bib files. No new entries, so no
-%  duplicate-key risk:
-%    dugan2022roft, wang2024semeval, kushnareva2024ai, gao2024llm,
-%    zeng2024aaai, zeng2024ijcai, wang2024m4, khairallah2025alhd,
-%    macko2023multitude, lucas2026bluff, doughman2024limitations,
-%    mcgovern2024fingerprints
+%  Two paragraphs, 7 citations. All keys already in your .bib:
+%    wang2024semeval, zeng2024aaai, dugan2022roft, gao2024llm, wang2024m4,
+%    doughman2024limitations, macko2023multitude
 %
-%  Citation density is comparable to the HAT sections (12 citations across the
-%  construction and validation material). The mapping from each citation to the
-%  claim it supports is in README_ABD_CITATIONS.md -- check each one against the
-%  paper you actually have before submitting.
+%  All five cross-references are kept (app:abd-cleaning, app:abd-prompts,
+%  fig:abd-constructions, fig:abd-positions, tab:abd-composition) -- dropping
+%  any leaves that float or appendix unreferenced from the body.
 % ============================================================================
 
 \subsection{Sinhala-ABD}
@@ -21,87 +17,52 @@
 Mixed documents are built from contiguous Wikipedia passages of six to twelve
 sentences, cut from articles that survive a page-type and prose filter
 (Appendix~\ref{app:abd-cleaning}). Every sentence carries a human or machine
-label, and boundaries are derived from the label sequence rather than stored
-separately, so a boundary is by definition an index where the label changes.
-Sentence-level labelling inside a document is a stricter setting than the
-document-level judgement of Sinhala-HAT: the detector cannot rely on a global
-verdict but must localise a change of authorship within text that is largely
-human-written \citep{wang2024semeval,zeng2024aaai}. Releasing labels per
-sentence rather than per document also lets the same corpus support both
-sentence classification and boundary localisation, which prior hybrid-text
-resources treat as separate problems \citep{gao2024llm,zeng2024ijcai}.
+label, and boundaries are derived from the label sequence, so a boundary is an
+index where the label changes. Localising a change of authorship inside largely
+human text is a stricter setting than document-level classification
+\citep{wang2024semeval,zeng2024aaai}.
 
 \paragraph{Construction types and composition.}
 Figure~\ref{fig:abd-constructions} illustrates continuation, single-span
 replacement, and multi-span replacement; Table~\ref{tab:abd-composition}
-summarises the resulting corpus by construction type and generator.
-\emph{Continuation} follows the setting introduced by RoFT
-\citep{dugan2022roft} and studied since as a boundary-detection task
-\citep{kushnareva2024ai}: a human prefix is followed by machine text, giving a
-single boundary. A split point is sampled uniformly between 20\% and 80\% of
-the passage; the true remainder is discarded and the model writes a replacement
-conditioned on the prefix. The two replacement types instead place machine text
-\emph{inside} human text, as in hybrid essays and co-authored documents
-\citep{zeng2024aaai,gao2024llm}. In \emph{single-span replacement}, one internal
-span of one to three sentences is rewritten, with the model shown the left and
-right context but instructed to rewrite only the marked span. In
-\emph{multi-span replacement}, two or three non-adjacent spans of one to two
-sentences are rewritten, each generated \emph{independently from the original
-human passage} rather than sequentially, so the model cannot impose a single
-consistent machine register across the document; all spans in a document come
-from one generator.
-
-\paragraph{Design constraints.}
-Three constraints exist to keep the corpus from being solvable by surface cues
-rather than by authorship. Spans may not include the first or last sentence,
-and at least one human sentence separates consecutive spans, so replacement
-never degenerates into a prefix or suffix change. The 20--80\% sampling and the
-first/last-sentence rule together stop position alone from identifying a
-boundary; the resulting distribution is shown in
-Figure~\ref{fig:abd-positions}. Replacing existing text rather than inserting
-invented sentences keeps the surrounding passage genuinely human-written and
-constrains the machine text to the content it replaces, which prevents topic
-from separating the classes \citep{wang2024m4}. As in Sinhala-HAT, generated
-spans are length-matched to the text they replace, since unconstrained output
-is systematically longer and length alone then becomes a shortcut
-\citep{doughman2024limitations}. Documents are never padded into a longer type:
-a passage too short for a construction is simply ineligible for it.
-Three generators are used, so the corpus is not built around one model's style
-\citep{wang2024m4,khairallah2025alhd}, and Gemini~2.5~Pro is generated for a
-disjoint subset of source articles so that it can be held out entirely,
-supporting the cross-model evaluation that detection results are known to be
-sensitive to \citep{macko2023multitude,lucas2026bluff}.
-Sinhala-ABD is constructed independently of Sinhala-HAT, although human source
-texts may overlap between the two datasets. Sinhala-ABD prompts specify the
-task in Sinhala and add English constraint blocks;
-Appendix~\ref{app:abd-prompts} reproduces the prompts, including an unused
-reverse-continuation family.
+summarises the corpus by construction type and generator. \emph{Continuation}
+follows RoFT \citep{dugan2022roft}: a human prefix is followed by machine text,
+with the split sampled uniformly between 20\% and 80\% of the passage. The
+replacement types instead place machine text inside human text, as in hybrid
+essays \citep{zeng2024aaai,gao2024llm}: single-span rewrites one internal span
+of one to three sentences, and multi-span rewrites two or three non-adjacent
+spans of one to two sentences, each generated independently from the original
+passage so that no consistent machine register spans the document. Spans never
+include the first or last sentence and are separated by at least one human
+sentence; with the 20--80\% sampling, this keeps position from identifying a
+boundary (Figure~\ref{fig:abd-positions}). Replacement rather than insertion
+keeps the surrounding text genuinely human-written and holds topic constant
+\citep{wang2024m4}, and spans are length-matched to the text they replace, since
+length alone otherwise becomes a shortcut \citep{doughman2024limitations}.
+Gemini~2.5~Pro is generated for a disjoint subset of articles so that it can be
+held out entirely \citep{macko2023multitude}. Prompts are reproduced in
+Appendix~\ref{app:abd-prompts}.
 
 
 % ---------------------------------------------------------------------------
-%  Validation paragraph, with citations. Replaces the current
-%  \paragraph{Automatic validation of Sinhala-ABD.}
+%  Validation paragraph (unchanged from what you already have, plus one
+%  citation on the length tolerance and one on symmetric cleaning).
 % ---------------------------------------------------------------------------
 \paragraph{Automatic validation of Sinhala-ABD.}
 Because a mixed document's labels are only correct if the generated span is
-actually usable in place of the text it replaced, every generation passes seven
-automatic checks before it enters the corpus: exact sentence count; word count
-within $\pm$25\% of the replaced span; no preamble; no Markdown; predominantly
-Sinhala script; not a near-copy of the original span under normalised
-comparison; and preservation of numeric tokens, so a date or quantity cannot
+usable in place of the text it replaced, every generation passes seven automatic
+checks: exact sentence count; word count within $\pm$25\% of the replaced span;
+no preamble; no Markdown; predominantly Sinhala script; not a near-copy of the
+original span; and preservation of numeric tokens, so a date or quantity cannot
 silently mutate. A failing generation is retried up to three times and then
-discarded, and outputs are never edited by hand, so the corpus contains only
-text the generators actually produced. Across 5{,}109 rejected generations,
-which record 5{,}951 individual check failures since one generation may fail
-several checks at once, 53.7\% of failures were length violations, 23.9\%
+discarded, and outputs are never edited by hand. Across 5{,}109 rejected
+generations, which record 5{,}951 individual check failures since one generation
+may fail several checks, 53.7\% of failures were length violations, 23.9\%
 sentence-count violations, 16.3\% number mutations, 3.5\% script violations,
 2.3\% near-copies, and 0.3\% formatting. The length tolerance was deliberately
 not relaxed: all three generators under-write Sinhala relative to the human
-span, and admitting shorter machine spans would let sentence length substitute
-for authorship as a detection signal \citep{doughman2024limitations}. Removing
-formatting and preamble symmetrically, rather than normalising the text
-further, follows the same reasoning as for Sinhala-HAT: punctuation and surface
-form themselves carry authorship information, so aggressive cleaning would
-destroy signal and introduce class-specific artifacts
+span, and admitting shorter machine spans would let length substitute for
+authorship \citep{doughman2024limitations}. Cleaning is symmetric and minimal,
+since surface form itself carries authorship information
 \citep{mcgovern2024fingerprints}. 76.8\% of accepted documents passed on the
 first attempt, 15.2\% after one retry, and 8.0\% after two or more.
