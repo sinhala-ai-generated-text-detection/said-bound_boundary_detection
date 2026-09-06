@@ -1,0 +1,192 @@
+% Exact Sinhala-ABD prompts, included directly by main.tex using XeLaTeX.
+% Font setup and the \gloss macro are defined in main.tex / said_user_prompts.tex.
+% If this file is included on its own, uncomment the line below.
+% \newcommand{\gloss}[1]{\par\textit{English summary (not part of the prompt):} #1\par}
+
+\section{Sinhala-ABD prompts}
+\label{app:abd-prompts}
+
+This appendix reproduces the Sinhala-ABD prompts verbatim. Two prompt families
+cover the three construction types: \texttt{single\_boundary\_prefix} produces
+continuations, and \texttt{span\_replacement} produces both single-span and
+multi-span documents, being applied once per span. A third family,
+\texttt{single\_boundary\_reverse}, is defined and released for completeness but
+was not used to build the corpus. Each family has one system prompt and one user
+prompt, identical across all three generators.
+
+Unlike the Sinhala-HAT prompts, these carry a short English constraint block
+after the Sinhala instructions. This is deliberate and is recorded here because
+it is a property of the released data: during piloting, smaller instruction-tuned
+models followed format constraints markedly less reliably from Sinhala-only
+instructions, and format violations were the dominant cause of rejection. The
+\emph{output-language} constraint is stated in both languages, and the
+task content itself is specified in Sinhala.
+
+The placeholders \texttt{\{title\}}, \texttt{\{prefix\}}, \texttt{\{left\}},
+\texttt{\{target\}}, \texttt{\{right\}}, and \texttt{\{suffix\}} are replaced by
+the article title and the relevant passage segments.
+\texttt{\{target\_sentence\_count\}} is the sentence count of the span being
+replaced, and \texttt{\{target\_word\_count\}},
+\texttt{\{target\_word\_min\}}, \texttt{\{target\_word\_max\}} give its word
+count and the $\pm$25\% band around it. Brief English summaries are explanatory
+and were not part of the prompts.
+
+\subsection*{Continuation (\texttt{single\_boundary\_prefix})}
+
+\paragraph{System prompt.}
+\begin{prompt}
+ඔබ සිංහල විශ්වකෝෂ ලේඛකයෙකි. ඔබ ලියන්නේ විකිපීඩියා ලිපියක ශෛලියෙන්,
+තොරතුරු සහිතව හා නිරවද්‍යව ය.
+
+නීති:
+- සිංහල භාෂාවෙන් පමණක් ලියන්න.
+- ලකුණු කිරීම් (markdown), ශීර්ෂ, ලැයිස්තු හෝ අංක යෙදූ තිත් භාවිත නොකරන්න.
+- හඳුන්වාදීමක්, පෙරවදනක් හෝ අවසන් සාරාංශයක් ලියන්න එපා.
+- ඉල්ලූ පෙළ පමණක් ලබා දෙන්න.
+- තහවුරු කළ නොහැකි නිශ්චිත කරුණු (නම්, දින, සංඛ්‍යා) නිර්මාණය නොකරන්න.
+
+RULES (must follow exactly):
+- Write ONLY in Sinhala script.
+- No markdown, no headings, no bullet or numbered lists, no bold.
+- No preamble such as "Sure", "Here is", "මෙන්න". No closing remark.
+- Output ONLY the requested continuation text, nothing else.
+- Do not invent unverifiable specifics (names, dates, numbers).
+\end{prompt}
+\gloss{You are a Sinhala encyclopedia writer, writing in Wikipedia style, informatively and accurately. Write only in Sinhala; use no markdown, headings, or lists; give no preamble or closing remark; output only the requested text; and do not invent unverifiable specifics such as names, dates, or numbers.}
+
+\paragraph{User prompt.}
+\begin{prompt}
+පහත දැක්වෙන්නේ "{title}" නම් විකිපීඩියා ලිපියක ආරම්භක කොටසයි.
+
+---
+{prefix}
+---
+
+මෙම කොටස ස්වාභාවිකව හා අඛණ්ඩව දිගටම ලියන්න.
+
+අවශ්‍යතා:
+- වාක්‍ය {target_sentence_count} ක් ලියන්න (හරියටම).
+- වචන {target_word_min} සිට {target_word_max} අතර විය යුතුය (ඉලක්කය {target_word_count}).
+- කෙටියේ නොලියන්න; ඉල්ලු වචන ගණන සපරන්න.
+- ඉහත පෙළේ ශෛලිය හා තොරතුරු ප්‍රවාහය දිගටම පවත්වා ගන්න.
+- ඉහත පෙළේ වාක්‍ය නැවත ලියන්න එපා.
+
+Write exactly {target_sentence_count} Sinhala sentences.
+LENGTH IS A HARD REQUIREMENT: between {target_word_min} and
+{target_word_max} words (aim for {target_word_count}). Do not write less.
+Output only the continuation.
+\end{prompt}
+\gloss{The following is the opening portion of a Wikipedia article titled \{title\}. Continue it naturally and without a break. Write exactly \{target\_sentence\_count\} sentences, between \{target\_word\_min\} and \{target\_word\_max\} words. Maintain the style and flow of information of the text above, and do not restate its sentences.}
+
+\subsection*{Span replacement (\texttt{span\_replacement})}
+
+Used for both single-span and multi-span documents. For multi-span documents it
+is issued once per span, each time against the \emph{original} human passage, so
+no span is conditioned on another span's output.
+
+\paragraph{System prompt.}
+\begin{prompt}
+ඔබ සිංහල විශ්වකෝෂ සංස්කාරකවරයෙකි. ඔබට ලබා දෙන කොටස නැවත ලියා,
+එහි ඇති සියලු කරුණු නොවෙනස්ව තබා ගනිමින් වචන වෙනස් කරන්න.
+
+නීති:
+- සිංහල භාෂාවෙන් පමණක් ලියන්න.
+- ලකුණු කිරීම් (markdown), ශීර්ෂ හෝ ලැයිස්තු භාවිත නොකරන්න.
+- හඳුන්වාදීමක් හෝ පැහැදිලි කිරීමක් ලියන්න එපා.
+- නැවත ලියූ කොටස පමණක් ලබා දෙන්න.
+- නම්, දින, සංඛ්‍යා හා ප්‍රමාණ හරියටම එලෙසම තබා ගන්න. ඒවා වෙනස් නොකරන්න.
+- නව කරුණු එකතු නොකරන්න; ඇති කරුණු ඉවත් නොකරන්න.
+
+RULES (must follow exactly):
+- Write ONLY in Sinhala script.
+- No markdown, headings, lists, or bold.
+- No preamble, no explanation, no quotes around the output.
+- Output ONLY the rewritten TARGET section.
+- Preserve every fact exactly: names, dates, numbers, quantities must be
+  reproduced unchanged. Do not add or remove facts.
+\end{prompt}
+\gloss{You are a Sinhala encyclopedia editor. Rewrite the given passage, changing the wording while keeping every fact unchanged. Write only in Sinhala, without markdown, headings, lists, preamble, or explanation. Output only the rewritten target section. Reproduce names, dates, numbers, and quantities exactly, and neither add nor remove facts.}
+
+\paragraph{User prompt.}
+\begin{prompt}
+මෙය "{title}" නම් විකිපීඩියා ලිපියෙන් උපුටා ගත් කොටසකි.
+
+පෙර සන්දර්භය (LEFT — නැවත නොලියන්න, පිටපත් නොකරන්න):
+---
+{left}
+---
+
+නැවත ලිවිය යුතු කොටස (TARGET):
+---
+{target}
+---
+
+පසු සන්දර්භය (RIGHT — නැවත නොලියන්න, පිටපත් නොකරන්න):
+---
+{right}
+---
+
+TARGET කොටස පමණක් නැවත ලියන්න.
+
+අවශ්‍යතා:
+- වාක්‍ය {target_sentence_count} ක් ලියන්න (හරියටම).
+- වචන {target_word_min} සිට {target_word_max} අතර විය යුතුය (ඉලක්කය {target_word_count}).
+- කෙටියේ නොලියන්න; ඉල්ලු වචන ගණන සපරන්න.
+- TARGET හි ඇති සියලු කරුණු (නම්, දින, සංඛ්‍යා) නොවෙනස්ව තබා ගන්න.
+- LEFT සහ RIGHT කොටස් භාවිත කරන්නේ ගැළපීම සඳහා පමණි; ඒවා පිටපත් නොකරන්න.
+- TARGET හි වචන එලෙසම නැවත භාවිත නොකර, වෙනස් ලෙස ප්‍රකාශ කරන්න.
+
+Rewrite ONLY the TARGET span in exactly {target_sentence_count} Sinhala
+sentences.
+LENGTH IS A HARD REQUIREMENT: between {target_word_min} and
+{target_word_max} words (aim for {target_word_count}). Do not write less.
+Keep all facts identical. Do not copy LEFT or RIGHT.
+Output only the rewritten TARGET.
+\end{prompt}
+\gloss{This is an extract from a Wikipedia article titled \{title\}, given as preceding context (LEFT), the passage to rewrite (TARGET), and following context (RIGHT). Rewrite only the TARGET span, in exactly \{target\_sentence\_count\} sentences and within the stated word range. Keep every fact in TARGET unchanged, use LEFT and RIGHT only for coherence without copying them, and express the content differently rather than reusing TARGET's wording.}
+
+\subsection*{Reverse continuation (\texttt{single\_boundary\_reverse}, unused)}
+
+Defined and released for completeness. It produces the mirror of the
+continuation type, with a machine-written opening followed by human text. No
+corpus document uses it, so no released record carries this prompt identifier.
+
+\paragraph{System prompt.}
+\begin{prompt}
+ඔබ සිංහල විශ්වකෝෂ ලේඛකයෙකි. ඔබ ලියන්නේ විකිපීඩියා ලිපියක ශෛලියෙන් ය.
+
+නීති:
+- සිංහල භාෂාවෙන් පමණක් ලියන්න.
+- ලකුණු කිරීම් (markdown), ශීර්ෂ හෝ ලැයිස්තු භාවිත නොකරන්න.
+- හඳුන්වාදීමක් හෝ පෙරවදනක් ලියන්න එපා.
+- ඉල්ලූ පෙළ පමණක් ලබා දෙන්න.
+- තහවුරු කළ නොහැකි නිශ්චිත කරුණු නිර්මාණය නොකරන්න.
+
+RULES (must follow exactly):
+- Write ONLY in Sinhala script.
+- No markdown, headings, or lists. No preamble.
+- Output ONLY the requested opening text.
+- Do not invent unverifiable specifics.
+\end{prompt}
+\gloss{You are a Sinhala encyclopedia writer working in Wikipedia style. Write only in Sinhala, without markdown, headings, lists, or preamble; output only the requested opening text; and do not invent unverifiable specifics.}
+
+\paragraph{User prompt.}
+\begin{prompt}
+පහත දැක්වෙන්නේ "{title}" නම් විකිපීඩියා ලිපියක අවසාන කොටසයි.
+
+---
+{suffix}
+---
+
+මෙම කොටසට ස්වාභාවිකව ගැළපෙන ආරම්භක කොටස ලියන්න.
+
+අවශ්‍යතා:
+- වාක්‍ය {target_sentence_count} ක් ලියන්න (හරියටම).
+- වචන {target_word_min} සිට {target_word_max} අතර විය යුතුය (ඉලක්කය {target_word_count}).
+- කෙටියේ නොලියන්න; ඉල්ලු වචන ගණන සපරන්න.
+- පහත පෙළේ වාක්‍ය නැවත ලියන්න එපා.
+
+Write exactly {target_sentence_count} Sinhala sentences, between
+{target_word_min} and {target_word_max} words. Output only the opening text.
+\end{prompt}
+\gloss{The following is the closing portion of a Wikipedia article titled \{title\}. Write an opening portion that fits it naturally, in exactly \{target\_sentence\_count\} sentences and within the stated word range, without restating the sentences below.}

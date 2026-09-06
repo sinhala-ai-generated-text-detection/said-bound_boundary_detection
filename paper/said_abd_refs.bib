@@ -1,0 +1,58 @@
+% ============================================================================
+%  Additional references for the Sinhala-ABD sections.
+%
+%  Your existing .bib files already contain: dugan2022roft, wang2024semeval,
+%  zeng2024aaai, zeng2024ijcai, doughman2024limitations, wang2024m4,
+%  khairallah2025alhd, lucas2026bluff, hettiarachchi2024nsina,
+%  wijeratne2020sinhala, gebru2021datasheets.
+%
+%  Only add entries below that you actually cite. The first three are the ones
+%  the Sinhala-ABD text most directly needs; the rest are optional support for
+%  specific claims, noted per entry.
+% ============================================================================
+
+% -- Cited if you keep the sentence on why replacement is used rather than
+%    free insertion, and for framing boundary detection as change detection.
+@inproceedings{gao2024llm,
+  title     = {{LLM}-as-a-Coauthor: Can Mixed Human-Written and Machine-Generated Text Be Detected?},
+  author    = {Gao, Qihui and Zhao, Yichen and Zhang, Yi and others},
+  booktitle = {Findings of the Association for Computational Linguistics: NAACL 2024},
+  year      = {2024},
+  note      = {Verify author list and pages against the ACL Anthology entry before submission.}
+}
+
+% -- Supports the claim that boundary/segment-level labelling is a distinct
+%    and harder setting than document-level detection.
+@inproceedings{kushnareva2024ai,
+  title     = {{AI}-generated Text Boundary Detection with {RoFT}},
+  author    = {Kushnareva, Laida and Gaintseva, Tatiana and Magai, German and
+               Barannikov, Serguei and Abulkhanov, Dmitry and Kuznetsov, Kristian and
+               Tulchinskii, Eduard and Piontkovskaya, Irina and Nikolenko, Sergey},
+  booktitle = {Proceedings of the Conference on Language Modeling (COLM)},
+  year      = {2024},
+  note      = {Verify venue and page numbers before submission.}
+}
+
+% -- Optional: supports the multilingual-encoder choice if you mention XLM-R
+%    anywhere in the dataset description (e.g. tokenisation of Sinhala).
+@inproceedings{conneau2020unsupervised,
+  title     = {Unsupervised Cross-lingual Representation Learning at Scale},
+  author    = {Conneau, Alexis and Khandelwal, Kartikay and Goyal, Naman and
+               Chaudhary, Vishrav and Wenzek, Guillaume and Guzm{\'a}n, Francisco and
+               Grave, Edouard and Ott, Myle and Zettlemoyer, Luke and Stoyanov, Veselin},
+  booktitle = {Proceedings of the 58th Annual Meeting of the Association for
+               Computational Linguistics},
+  pages     = {8440--8451},
+  year      = {2020}
+}
+
+% -- Optional: cite alongside your existing doughman2024limitations if you want
+%    a second source for length acting as a shortcut feature.
+@inproceedings{sarvazyan2023supervised,
+  title     = {Supervised Machine-Generated Text Detectors: Family and Scale Matters},
+  author    = {Sarvazyan, Areg Mikael and Gonz{\'a}lez, Jos{\'e} {\'A}ngel and
+               Rosso, Paolo and Franco-Salvador, Marc},
+  booktitle = {Experimental IR Meets Multilinguality, Multimodality, and Interaction (CLEF)},
+  year      = {2023},
+  note      = {Verify pages before submission.}
+}
