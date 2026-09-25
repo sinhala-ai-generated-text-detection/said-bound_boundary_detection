@@ -5,7 +5,7 @@ and *why* each design choice was made rather than an alternative. Written to be
 readable without looking at the code, and detailed enough that you could
 reimplement it or defend it to a reviewer.
 
-Three parts:
+Five parts:
 
 1. **[Dataset generation](#part-1--dataset-generation)** — turning Sinhala
    Wikipedia into labelled mixed-authorship documents
@@ -13,6 +13,19 @@ Three parts:
    every score means, what "context" actually is
 3. **[The generative-AI work](#part-3--the-generative-ai-component)** — using a
    language model's own probability estimates as a detection signal
+4. **[Counterfactual twins](#part-4--counterfactual-twins)** — the finding that
+   the detector invents boundaries in purely human text, and a training method
+   that uses the dataset's own structure to address it
+5. **[Threats to validity](#part-5--threats-to-validity)** — what the numbers
+   do and do not show
+
+Every number here is taken from a results file in `reports/`, laid out as:
+
+| folder | contents |
+|---|---|
+| `reports/dataset/` | the dataset audit |
+| `reports/generation/` | generator pilot, fluency assessment, cross-model comparison, screening evidence |
+| `reports/detection/` | every detector result: linear, XLM-R, likelihood, twin runs, operating-point analysis |
 
 ---
 
@@ -239,7 +252,34 @@ Sinhala *language* scores 1.0 and passes. Format checks and quality checks are
 different things. Any new generator must be read by a human before it is
 trusted.
 
-GPT-4o replaced it. Evidence archived in `reports/evidence/`.
+GPT-4o replaced it. Evidence archived in `reports/generation/evidence/`.
+
+### Comparing the three generators on identical inputs
+
+To compare generators fairly, 20 matched examples were produced in which
+**every model rewrote the same span of the same window under the same plan**.
+(Normally the span-selection RNG is seeded per generator, which would give each
+model a different span.) They were drawn from dev/test so the held-out
+generator was permitted. Full text in `reports/generation/model_comparison.md`.
+
+| model | produced | mean Δ words | mean abs Δ words | mean Δ sentences | mean retries |
+|---|---|---|---|---|---|
+| DeepSeek V3 | 17/20 | −3.1 | 5.5 | +0.00 | 0.47 |
+| GPT-4o | 16/20 | −7.9 | 8.1 | +0.00 | 0.25 |
+| Gemini 2.5 Pro | 18/20 | −4.0 | 6.2 | +0.00 | 0.11 |
+
+All three hit the requested **sentence** count exactly, because that check is
+binding, while under-shooting the **word** count. GPT-4o under-writes most, and
+Gemini needs the fewest retries. One matched example failed for all three: a
+7-sentence, 196-word target. Long targets are where every model under-generates,
+so that failure is systematic rather than model-specific.
+
+Qualitatively, all three write fluent Sinhala. DeepSeek V3 writes natural
+encyclopedic prose whose sentences run longer than the originals. GPT-4o
+follows instructions most closely and renders technical terms in Sinhala
+(`කුබිට්ස්`, qubits) rather than falling back to English. Gemini 2.5 Pro
+produces the most natural Sinhala, with correct honorifics (`පියතුමා`,
+`මහත්මිය`) and accurate Sri Lankan place names.
 
 ## 1.8 The three construction types
 
@@ -322,6 +362,58 @@ machine author, not three.
 
 **Documents are never padded into a higher type.** A 5-sentence window is simply
 ineligible for Type 3 rather than being stretched.
+
+**A property that turns out to matter later.** Because every construction
+*replaces* sentences instead of inserting them, each mixed document has an
+exactly aligned all-human counterpart: its source window. Part 4 builds on this.
+
+### Worked examples
+
+Real records from the dataset, with gold labels.
+
+**Type 1 — `මැඩගස්කරයේ භූගෝලය` (Geography of Madagascar), DeepSeek V3.**
+`labels = [0,0,0,0,1,1]`, boundary at index 4.
+
+| # | label | sentence |
+|---|---|---|
+| 0 | HUMAN | මිනිසුන් මැඩගස්කරයට පැමිණීමෙන් පසු අවම වශයෙන් ලීමර් විශේෂ 17 ක් වඳ වී ගොස් ඇති අතර, ඒවා සියල්ලම ඉතිරිව ඇති ලීමර් විශේෂයට වඩා විශාල විය. |
+| 1 | HUMAN | ෆොසා (බළලුන් වැනි) ඇතුළු තවත් ක්ෂීරපායින් ගණනාවක් මැඩගස්කරයට ආවේණික වේ. |
+| 2 | HUMAN | දිවයිනේ කුරුලු විශේෂ 300කට අධික ප්‍රමාණයක් වාර්තා වී ඇති අතර ඉන් සියයට 60කට වැඩි ප්‍රමාණයක් ආවේණික වේ. |
+| 3 | HUMAN | (එක් ආවේණික පවුලක් ඇතුළුව). |
+| 4 | **AI** | මැඩගස්කරයේ සීනීන් ඇතුළුව උභයජීවීන්ගේ විශේෂ 370කට අධික ප්‍රමාණයක් වාර්තා වී ඇති අතර ඉන් සියයට 99කට වැඩි ප්‍රමාණයක් ආවේණික වේ. |
+| 5 | **AI** | තවද මෙම දිවයිනේ කටුස්සා වැනි සත්ව විශේෂ ගණනාවක් පමණක් නොව සත්ව ගණයේ අනන්‍යතාවයන් දක්නට ලැබේ. |
+
+Sentence 4 fluently continues the endemism statistics of sentence 2. The
+boundary is not lexically obvious.
+
+**Type 2 — `රෙකෝන්ඩය` (Recorder), GPT-4o.** `labels = [0,0,0,1,0,0]`,
+boundaries at 3 and 4.
+
+| # | label | sentence |
+|---|---|---|
+| 2 | HUMAN | මෙය දැවය භාණ්යක් වන අතර ඇගිලි ගණනක් සදහා සිදුරු සහිත මෙය මුඛ්‍ය හා සම්බන්ධ මත ස්ථානයේ වඩා පලල්වද ඉතා දුරට යන්නට සිහින්මය යන ආකාරයද නිපදවා ඇත. |
+| 3 | **AI** | මධ්‍ය යුගයේ විශේෂයෙන්ම ජනප්‍රිය වූ රෙකෝඩරය, දහ අටවන ශතවර්ෂයෙන් පසු සංගීත උපකරණයකි, නමුත් ඊට පසුව එහි භාවිතය සන්සුන් වශයෙන් අඩු විය. |
+| 4 | HUMAN | මධ්‍යතන යුගයේ මෙම සංගීත භාණ්ය කොතරම් ජනප්‍රියව කිබණේද යත් සාහිත්‍යමය කලා නිර්මාණ ආදියේ නිර්තන්තර එම සංගීත භාණ්ඩය පිළිබද සටහන් දැකිය හැකි විය. |
+
+Here the **AI sentence is cleaner than the human sentences around it**:
+Sinhala Wikipedia carries typographical noise (`භාණ්යක්`, `කිබණේද`). A
+detector can therefore learn "cleaner text = AI". Part 5 measures this.
+
+**Type 3 — `උගන්ඩාවේ භූගෝලය` (Geography of Uganda), DeepSeek V3.**
+`labels = [0,0,1,0,1,0,1,0]`: three single-sentence AI spans, each isolated
+between human sentences.
+
+| # | label | sentence |
+|---|---|---|
+| 1 | HUMAN | රට සාමාන්‍යයෙන් මුහුදු මට්ටමේ සිට මීටර් 900 ක උසකින් පිහිටා ඇත. |
+| 2 | **AI** | උගන්ඩාවේ නැගෙනහිර හා බටහිර දෙපසම කඳුකරයන් පිහිටා ඇත. |
+| 3 | HUMAN | රුවෙන්සෝරි කඳුවැටිය උගන්ඩාවේ උසම කඳු මුදුන අඩංගු වන අතර … මීටර් 5,094 කි. |
+| 4 | **AI** | රටේ දකුණු කොටසෙහි විශාල ප්‍රදේශයක් … වික්ටෝරියා විලේ බලපෑමට යටත්ව ඇති අතර එහි බොහෝ දූපත් දක්නට ලැබේ. |
+| 5 | HUMAN | කම්පාලා අගනුවර සහ එන්ටෙබේ අගනුවර ඇතුළුව මෙම වැව ආසන්නයේ වඩාත් වැදගත් නගර දකුණේ පිහිටා ඇත. |
+| 6 | **AI** | රටේ මධ්‍යයේ පිහිටි කියෝගා විල පුළුල් වගුරු බිම් වලින් යුක්ත වේ. |
+
+Alternating single-sentence spans are the hardest configuration in the
+dataset, and they are why run-length smoothing fails (§2.5).
 
 ## 1.9 Prompting
 
@@ -786,8 +878,8 @@ model. Human text is more surprising.
 So: **use a language model's own probability estimates as a detection feature.**
 This is the family that DetectGPT, Fast-DetectGPT and especially **SeqXGPT**
 belong to — SeqXGPT uses per-token log-probability lists for exactly this
-sentence-level task, and your paper already cites it. The novelty here is
-applying it to a **low-resource language where it has not been tested**.
+sentence-level task. What is new here is applying it to a **low-resource
+language where it has not been tested**.
 
 ## 3.2 How the scoring works mechanically
 
@@ -913,9 +1005,12 @@ access to that information at all**.
 
 **This predicts the fix:** score the likelihood features with a **different
 model family** — a causal multilingual LM with different pretraining — so the
-signal is genuinely complementary rather than redundant. That is the single most
-promising next experiment, and if it works it is the strongest technical claim
-available to the paper.
+signal is genuinely complementary rather than redundant. This has not been run
+yet. Note that a very similar English-only idea has since been published as a
+zero-shot method (change-point detection over Fast-DetectGPT scores,
+arXiv 2605.03723), so on its own it would be an application to a new language
+rather than a new method. That is why the project's main technical
+contribution moved to Part 4.
 
 ## 3.7 An engineering detail worth knowing
 
@@ -932,6 +1027,276 @@ every eight positions were being projected and discarded.
 
 **7 hours → 45 minutes** for the full corpus, with output verified identical to
 four decimal places.
+
+---
+
+# Part 4 — Counterfactual twins
+
+## 4.1 The problem nobody measures
+
+Every document the detector is trained on contains at least one boundary, by
+construction. So does every test document. A detector can therefore learn
+**"there is always machine text somewhere, find the most machine-like
+sentence"** and still score well, because the benchmark never shows it a
+document with no machine text.
+
+In real use, most documents a detector sees are entirely human. So the question
+the mixed-document metrics cannot answer is: **what does the detector do on
+purely human text?**
+
+## 4.2 The twin: a free, exactly matched control
+
+The construction in §1.8 *replaces* human sentences rather than inserting new
+ones. So for every mixed document, its source window is the **same document
+with every AI sentence swapped back for the human sentence it displaced**:
+
+```
+mixed:  [H0] [H1] [AI2] [H3] [H4]      labels 0 0 1 0 0
+twin:   [H0] [H1] [H2 ] [H3] [H4]      labels 0 0 0 0 0
+```
+
+Same topic, same length, same positions. Only authorship differs, and only at
+the replaced positions. This was verified, not assumed: all 4,244 documents
+align sentence-for-sentence with their window in `sources/windows.jsonl`, and
+the loader (`data.load_twins`) refuses to build a twin if any human sentence
+does not match.
+
+Many boundary-detection datasets cannot do this. Datasets built by insertion,
+or by continuing a prompt with no human remainder kept, have no aligned human
+counterpart.
+
+## 4.3 What the baseline does on twins
+
+The saved XLM-R tagger, re-scored with no retraining
+(`reports/detection/xlmr_rescored.md`), threshold decoding:
+
+| on the 578 unique test twins | overall | seen | held-out |
+|---|---|---|---|
+| twins with ≥1 sentence flagged AI | **95.3%** | 94.4% | 95.8% |
+| boundaries predicted per twin (correct: 0) | **3.07** | 3.01 | 3.15 |
+| sentence false-positive rate | **26.2%** | 26.0% | 26.5% |
+
+Three things make this worse than it looks:
+
+- **The false-positive rate is higher with no machine text present.** Human
+  sentences inside mixed documents are flagged about 18% of the time. In pure
+  human documents it is 26%. The detector searches for machine text and
+  "finds" it.
+- **31% of the human originals at replaced positions are flagged as AI**, even
+  though they are the genuine human sentences. Part of what the model calls
+  "machine" is position and topic, not authorship.
+- **No threshold fixes it.** Sweeping the threshold from 0.05 to 0.95 (§4.7),
+  the baseline never flags fewer than 93% of twins. Its scores are too extreme
+  for any cut-off to separate them.
+
+The Viterbi decoder is worse still: 99.5% of twins flagged, 4.55 boundaries per
+twin.
+
+A useful single number is **exact-boundary F1 over the mixed documents and the
+twins together**, where any boundary predicted in a twin counts as a false
+positive. That is closer to deployment than mixed-only scoring, and for the
+baseline it drops from **0.603 to 0.434**.
+
+## 4.4 The training method
+
+With `--twins`, each mixed training document is batched **together with its
+twin**, and the loss has three terms (`transformer.twin_loss`):
+
+1. **Tagging loss on both documents.** Cross-entropy over the mixed document's
+   labels and over the twin (all human). With no twins this is exactly the
+   baseline objective.
+2. **Margin term.** At every replaced position, the AI sentence's score must
+   exceed the score of the human sentence it replaced by a margin (2.0 in logit
+   space). Position and topic are identical across the pair, so neither can
+   satisfy this term. Only authorship can.
+3. **Consistency term.** For every sentence that is human in *both* documents,
+   the two predictions should match (symmetric KL). Its author does not
+   change, so its prediction should not depend on whether machine text
+   appears elsewhere. This term targets the "there is always a boundary" prior
+   directly.
+
+`loss = CE + ramp × (λ_margin × margin + λ_consistency × consistency)`, with
+both λ = 1.
+
+### Details that matter
+
+- **Shared windows are down-weighted.** One window can produce several records
+  (different construction types or generators). In train, 856 windows back two
+  records and 51 back three or four. Without correction their twins would count
+  2–4 times, so each twin's loss is weighted by 1/k.
+- **Pairs are matched per sentence, not per position.** A twin sentence can
+  tokenize to a different length than the AI sentence it stands in for, so a
+  long document may split into 512-token chunks at different places. The
+  collate function (`collate_pairs`) records, for each sentence, where its
+  marker landed in each document, and the loss compares those. A unit test
+  forces the two documents to chunk differently and checks the mapping.
+- **Memory is unchanged.** Batches hold 2 pairs (4 documents), the same as the
+  baseline's 4 documents.
+
+## 4.5 The first attempt collapsed, and why
+
+With the paired terms on from the first step, the model **collapsed to a
+constant output** (`reports/detection/twin_no_warmup.md`):
+
+| epoch | CE | margin | consistency | dev boundary F1 |
+|---|---|---|---|---|
+| 1 | 0.670 | 1.991 | 0.020 | 0.453 |
+| 2–7 | ~0.642 | ~2.000 | 0.002–0.005 | 0.444, frozen |
+
+Reading the log:
+
+- **Margin stuck at 2.00** means the score gap between an AI span and its human
+  original was always zero. The margin loss equals the margin exactly when the
+  two scores are identical.
+- **Consistency near zero** was achieved the cheap way: a model that outputs
+  the same score for every sentence satisfies it perfectly.
+- On test, every sentence got nearly the same score (paired win rate 0.03),
+  and the threshold decoder labelled everything AI.
+
+This is the same trap described in §2.6: XLM-R spends its first epochs
+predicting one class before it learns to separate them. Early on, the encoder
+cannot tell a document from its twin, so the margin gradient cancels itself
+out, while the consistency term actively *rewards* ignoring the input. The
+paired terms held the model in the collapsed state it needed to escape.
+
+**How that diagnosis was confirmed.** The `twin_plain` ablation uses the same
+twins with both paired terms switched off. It trained normally (CE 0.556 →
+0.039 over 8 epochs), so neither the extra human data nor the class balance
+caused the collapse; the paired terms did.
+
+**The fix: a warm-up.** `--twin-warmup 2` keeps the paired terms off for two
+epochs, then ramps them in linearly over the third. With it, the model escapes
+the single-class phase during epoch 2 (CE 0.645 → 0.443), and when the paired
+terms arrive, training continues normally (margin 0.33 → 0.008 by epoch 8).
+
+## 4.6 Results
+
+Single seed, 8 epochs each, threshold decoding unless noted. Twin columns are
+on the unique test twins.
+
+| | baseline | twins only (`twin_plain`) | twins + paired terms (`twin_warm`) |
+|---|---|---|---|
+| twin false-alarm rate | 95.3% | 58.7% | **49.0%** |
+| boundaries per twin | 3.07 | 1.72 | **1.19** |
+| sentence FPR on twins | 26.2% | 15.7% | **10.0%** |
+| context stability | 0.885 | 0.931 | **0.956** |
+| paired win rate | 0.878 | 0.921 | 0.921 |
+| exact-boundary F1, mixed + twins | 0.434 | 0.448 | **0.464** |
+| exact-boundary F1, mixed only (Viterbi) | **0.603** | 0.595 | 0.580 |
+| held-out exact-boundary F1 (Viterbi) | **0.548** | 0.527 | 0.524 |
+
+*Context stability* is how often an untouched human sentence gets the same
+label in the mixed document and in its twin. *Paired win rate* is how often an
+AI sentence scores above the human sentence it replaced.
+
+What this shows:
+
+- **Adding twins at all fixes much of the problem.** Twins as plain extra human
+  documents cut false alarms by 37 points.
+- **The paired terms go further**: fewer false alarms (49% vs 59%), fewer
+  hallucinated boundaries (1.19 vs 1.72), better context stability.
+- **The consistency term does the work; the margin term adds nothing
+  measurable.** The paired win rate is 0.921 with or without the paired terms.
+  Plain cross-entropy on the twin already pushes the human original down.
+- **There is a cost on the original benchmark.** Mixed-only exact-boundary F1
+  falls, and the held-out generator falls more.
+
+## 4.7 Operating points: is the cost real?
+
+A single tuned threshold compares models at whatever point the selection rule
+happened to pick. Here that rule saw only mixed dev documents, and the
+threshold grid (0.20–0.80) cut off both the baseline (tuned to 0.80) and
+`twin_plain` (tuned to 0.20). So `src/detect/twin_tradeoff.py` sweeps the
+threshold from 0.05 to 0.95 for every saved model
+(`reports/detection/twin_tradeoff.md`):
+
+| model | twin false alarm, across all thresholds | best mixed-only exact-boundary F1 |
+|---|---|---|
+| baseline | 98% → 93% | **0.603** |
+| twins only | 63% → 43% | 0.554 |
+| twins + paired terms | **84% → 24%** | 0.554 |
+
+- **The baseline cannot be made quiet on human text.** At every threshold it
+  flags at least 93% of pure-human documents. This is the clearest finding of
+  the whole study, and it is a property of the model, not of the tuning.
+- **Twins alone lower the curve but flatten it.** False alarms bottom out at
+  43%, and the threshold barely moves them.
+- **Paired training is the only model with a usable operating range.** At
+  threshold 0.925 it flags 28% of human documents while keeping 0.502 mixed-only
+  exact-boundary F1. Neither other model can reach a 30% false-alarm rate at
+  any threshold.
+- **The mixed-only cost is real, not a tuning artifact.** Even at its best
+  threshold, each twin model tops out at 0.554, against the baseline's 0.603.
+
+Choosing each model's threshold on dev *mixed documents plus their twins*
+(a deployment-aware rule) gives exact-boundary F1 over mixed + twins of 0.438
+(baseline), 0.465 (twins only) and 0.464 (paired). On the held-out generator:
+0.359, 0.364 and **0.381**.
+
+## 4.8 Where this stands
+
+- **Established:** a detector trained only on mixed documents invents
+  authorship changes in nearly every human document, and no threshold fixes
+  it. The twin-based evaluation that shows this costs nothing extra to build.
+- **Promising:** paired twin training makes low false-alarm operation
+  possible. The consistency term is what matters.
+- **Not yet solved:** a ~5-point cost in mixed-only exact-boundary F1.
+- **Not yet established:** everything above is one seed. Small gaps (0.465 vs
+  0.464) cannot be claimed without at least three.
+
+Next experiments: fine-tune the trained baseline with twins instead of
+training from scratch (to keep its mixed-document accuracy); drop the margin
+term and vary the consistency weight; run three seeds; select checkpoints on
+dev mixed + twins rather than mixed only.
+
+---
+
+# Part 5 — Threats to validity
+
+**Surface noise in the human text ("cleaner text = AI").** Sinhala Wikipedia
+carries typographical noise that generator output lacks. Measured over all
+39,358 sentences:
+
+| feature | human sentences | machine sentences |
+|---|---|---|
+| space before punctuation | 3.55% | 0.01% |
+| parentheses | 12.0% | 2.6% |
+| no final punctuation | 3.33% | 0.17% |
+| Latin characters | 12.1% | 5.6% |
+| zero-width non-joiner | 0.52% | 0.01% |
+
+Any sentence with one of the first three is almost certainly human, so a
+detector can score partly on formatting. Unicode normalization is **not** the
+issue: neither class contains non-NFC text in meaningful amounts. How much of
+each detector's score comes from these cues has not yet been measured (for
+example, by re-scoring after normalizing them on both sides).
+
+**Human text is not guaranteed to predate LLMs.** The dataset was built from
+the current `wikipedia-monthly` snapshot, which has no revision timestamps, so
+it could not be filtered to pre-ChatGPT revisions.
+
+**Positional prior.** Boundaries fall at 20–80% of a document, and spans never
+touch the first or last sentence. A position-only baseline reaches 0.284
+exact-boundary F1. That is measured and weak, but it is not zero, and the twin
+results show the tagger does use position (§4.3).
+
+**Length prior.** The ±25% length gate bounds AI spans, but all generators
+still under-write by 3–8 words on average, so a residual length cue may remain.
+
+**Selection protocol.** Epochs and thresholds are chosen on dev *mixed*
+documents, which cannot see false alarms. The threshold grid in
+`run_transformer.py` (0.20–0.80) was hit at an edge by two runs. Both issues
+are quantified in §4.7, but the reported headline numbers still use the
+original protocol.
+
+**Single seed.** Every transformer result is one training run.
+
+**Single domain, single held-out generator.** Wikipedia only. Generalisation is
+measured against one unseen model, which cannot separate "generalises to
+unseen models" from "generalises to Gemini".
+
+**No human ceiling.** No annotation study establishes how well Sinhala readers
+do on this task.
 
 ---
 
@@ -953,7 +1318,17 @@ surface features are not — a 0.027 held-out gap against 0.153. Its one
 limitation is that it must come from a *different* model than the detector, or
 it is redundant.
 
-**Three things that were tested and reported as negatives**, because they are as
+**Counterfactual twins.** Because construction replaces rather than inserts,
+every mixed document has an exactly aligned all-human twin. On those twins the
+baseline flags machine text in 95% of documents, and no threshold brings that
+below 93%. Training on each document together with its twin, with a
+consistency term, gives the only detector that can operate at a low
+false-alarm rate (down to 24%), at a cost of about 5 points of mixed-only
+exact-boundary F1. Single seed so far.
+
+**Five things that were tested and reported as negatives**, because they are as
 useful as the positives: run-length smoothing hurts (Type 3 spans are one
-sentence by design), a learned pair head stalls training, and the likelihood
-discontinuity hypothesis is simply false in this data.
+sentence by design), a learned pair head stalls training, the likelihood
+discontinuity hypothesis is false in this data, paired twin losses switched on
+from the first step collapse training (a warm-up fixes it), and the twin margin
+term adds nothing over plain cross-entropy on the twin.

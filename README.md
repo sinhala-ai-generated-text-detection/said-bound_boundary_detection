@@ -1,165 +1,253 @@
-# Sinhala Human–AI Boundary-Detection Dataset Pipeline
+# Sinhala Human–AI Authorship Boundary Detection
 
-Turns human-written Sinhala Wikipedia articles into a labelled human–AI
-boundary-detection dataset. Every document mixes human and AI sentences; each
-sentence carries a `0` (human) / `1` (AI) label, and the label-change indices
-are the boundaries a model must learn to find.
+A dataset and a set of detectors for **finding where authorship changes from
+human to machine inside a Sinhala document**. Each document mixes human
+sentences with sentences written by a large language model. Every sentence is
+labelled `0` (human) or `1` (machine), and a *boundary* is any point where the
+label changes.
+
+The project covers the whole path:
+
+- **Dataset construction** from Sinhala Wikipedia: cleaning, sentence
+  segmentation, three construction types, three generators (one held out),
+  automatic validation, and leak-free splits.
+- **Detectors**: trivial and positional baselines, a character n-gram linear
+  model, masked-LM likelihood features, and a fine-tuned XLM-RoBERTa sentence
+  tagger.
+- **Counterfactual twin training and evaluation**: every mixed document has an
+  exactly aligned all-human counterpart, used to measure (and reduce) how often
+  a detector invents machine text in purely human documents.
+
+A full walkthrough of every design decision and result is in
+[docs/COMPLETE_EXPLAINER.md](docs/COMPLETE_EXPLAINER.md).
+
+## Key results
+
+Test set, 918 documents. Exact-boundary F1 is the primary metric: it is the
+only one that the trivial baselines cannot game.
+
+| model | sentence F1 (machine) | exact-boundary F1 | held-out generator F1 |
+|---|---|---|---|
+| position only (reads no text) | 0.567 | 0.284 | 0.550 |
+| linear, character n-grams + context | 0.678 | 0.438 | 0.571 |
+| linear + likelihood features | 0.704 | 0.450 | 0.615 |
+| **XLM-RoBERTa tagger** | **0.802** | **0.603** | **0.742** |
+
+On the **all-human twins** of the test documents:
+
+| | baseline XLM-R | + twin training |
+|---|---|---|
+| human documents with ≥1 sentence flagged | 95.3% | 49.0% |
+| lowest false-alarm rate reachable at any threshold | 93% | **24%** |
+| best mixed-only exact-boundary F1 at any threshold | **0.603** | 0.554 |
+
+Twin-training results are from a single seed. See
+[reports/detection/twin_tradeoff.md](reports/detection/twin_tradeoff.md) and
+Part 4 of the explainer.
+
+## Dataset
+
+**4,244 documents · 39,358 labelled sentences · 2,630 source articles ·
+36.4% machine sentences.**
+
+| construction | what the model writes | boundaries | documents |
+|---|---|---|---|
+| Type 1, continuation | a new ending after a human prefix (split at 20–80%) | 1 | 1,675 |
+| Type 2, single span | a rewrite of one internal 1–3 sentence span | 2 | 1,367 |
+| Type 3, multiple spans | independent rewrites of 2–3 internal 1–2 sentence spans | up to 6 | 1,202 |
+
+| generator | role | train | dev | test |
+|---|---|---|---|---|
+| DeepSeek V3 | seen | 1,186 | 273 | 302 |
+| GPT-4o (2024-11-20) | seen | 1,304 | 283 | 311 |
+| Gemini 2.5 Pro | held out | 0 | 280 | 305 |
+
+Splits are assigned over **source articles before any generation**, so no human
+passage appears in more than one split. Machine text always *replaces* human
+text in place, never inserted, so the surrounding text stays genuine. Seven
+automatic checks gate every generation (sentence count, length ±25%, no
+preamble, no markdown, Sinhala script, not a copy, numbers unchanged). Failures
+are regenerated, never hand-edited.
+
+Generating the full corpus took 11,587 API calls and cost $26.73.
+
+## Repository layout
+
+```
+config.yaml                 every tunable setting: models, sizes, thresholds, paths
+prompts/task2_prompts.yaml  Sinhala prompt templates
+src/
+  inspect_data.py           profile the source parquet
+  clean.py                  page-type filtering, markup stripping, prose gate
+  segment.py                the single deterministic Sinhala sentence segmenter
+  window.py                 contiguous 6-12 sentence windows
+  split.py                  source-level 70/15/15 split
+  openrouter.py             API client: retries, backoff, cost logging
+  generate.py               Type 1/2/3 construction and orchestration
+  validate.py               the seven validation checks
+  build_dataset.py          assemble and verify generated/combined.jsonl
+  audit.py                  dataset balance and boundary-position audit
+  pilot_report.py           generator pilot report
+  compare_models.py         matched cross-generator comparison
+  probe_models.py           try arbitrary generator slugs
+  make_figures.py           result figures
+  make_abd_figures.py       dataset figures
+  serve.py                  local web app for trying the detector
+  detect/
+    data.py                 dataset loading, counterfactual twins
+    metrics.py              sentence, boundary and twin metrics
+    models.py               baselines and the linear detector
+    likelihood.py           masked-LM likelihood features
+    transformer.py          XLM-R sentence tagger, twin training
+    run_experiments.py      baselines and linear models
+    run_transformer.py      XLM-R training and evaluation
+    twin_tradeoff.py        threshold sweep across saved models
+tests/                      unit tests
+reports/
+  dataset/                  dataset audit
+  generation/               pilot, fluency, cross-model comparison, evidence
+  detection/                all detector results (Markdown + JSON)
+docs/COMPLETE_EXPLAINER.md  full technical walkthrough
+```
+
+Not tracked (regenerated locally): `wikipedia.parquet`, `sources/`,
+`generated/`, `logs/`, `models/`, `cache/`, `reports/figures/`.
 
 ## Setup
 
+Python 3.11, and a CUDA GPU for the transformer (6 GB is enough).
+
 ```bash
 python -m venv .venv
-./.venv/Scripts/python.exe -m pip install -r requirements.txt   # Windows
-# source .venv/bin/activate && pip install -r requirements.txt  # POSIX
+.venv/Scripts/python -m pip install -r requirements.txt     # Windows
+# source .venv/bin/activate && pip install -r requirements.txt   # Linux/macOS
 ```
 
-The OpenRouter key is read from the `OPENROUTER_API_KEY` environment variable,
-or from a `.env` file at the repo root (gitignored):
+`torch` is pinned to a CUDA 12.4 build. Install it from the PyTorch index if
+pip cannot find it:
+`pip install torch --index-url https://download.pytorch.org/whl/cu124`.
+
+Generation needs an [OpenRouter](https://openrouter.ai) key, read from the
+`OPENROUTER_API_KEY` environment variable or a gitignored `.env` file:
 
 ```
 OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
-If the key is missing the pipeline fails loudly rather than silently skipping
-generation. The key is never hardcoded.
+The pipeline stops with an error if the key is missing.
 
-## Run order
+On Windows, set `PYTHONIOENCODING=utf-8` so Sinhala prints correctly.
 
-Each stage is independent and re-runnable. Prefix with `PYTHONIOENCODING=utf-8`
-on Windows so Sinhala prints correctly.
+## Usage
 
-| # | Command | What it does |
-|---|---|---|
-| 1 | `python src/inspect_data.py` | Profile `wikipedia.parquet`: schema, dtypes, samples, markup probes |
-| 2 | `python src/clean.py` | Namespace + page-type filter, markup strip, prose gate → `sources/human_sources.jsonl` |
-| 3 | `python -m pytest tests/ -q` | Unit tests for clean, segment, validate, generate |
-| 4 | `python src/window.py` | Contiguous 6–12 sentence windows → `sources/windows.jsonl` |
-| 5 | `python src/split.py` | 70/15/15 split over **source ids** → `splits/*.txt` |
-| 6 | `python src/generate.py --mode pilot` | Pilot generation (gated — see below) |
-| 7 | `python src/build_dataset.py --strict` | Assemble + verify → `generated/combined.jsonl` |
-| 8 | `python src/audit.py` | Balance and boundary-position report → `reports/audit.md` |
+### 1. Build the dataset
 
-Rehearse the whole path with **zero API calls and zero cost**:
+Place `wikipedia.parquet` (Sinhala Wikipedia export) in the repository root.
 
 ```bash
-python src/generate.py --mode pilot --dry-run
+python src/inspect_data.py                # profile the source
+python src/clean.py                       # -> sources/human_sources.jsonl
+python src/window.py                      # -> sources/windows.jsonl
+python src/split.py                       # -> splits/*.txt
+python src/generate.py --mode pilot       # pilot run, reviewed before the full run
+python src/generate.py --mode full        # add --fraction 0.2 for a nested partial run
+python src/build_dataset.py --strict      # -> generated/combined.jsonl
+python src/audit.py                       # -> reports/dataset/audit.md
 ```
 
-Other flags: `--generators deepseek_v3 mistral_nemo`, `--limit N`,
-`--config other.yaml`.
+`python src/generate.py --mode pilot --dry-run` rehearses the whole path with no
+API calls. Generation is resumable: records are keyed by a deterministic
+`record_id`, and completed ones are skipped on re-run.
 
-## The mandatory pilot gate
-
-`--mode full` must not be run until the pilot has been reviewed and approved.
-The pilot produces `reports/pilot_report.md` with per-generator validation
-pass-rates, sample generations, a full-run cost estimate, and a Sinhala-fluency
-assessment for each generator.
+### 2. Train and evaluate detectors
 
 ```bash
-python src/generate.py --mode full          # only after approval
+python src/detect/likelihood.py --build          # likelihood features -> cache/
+python src/detect/run_experiments.py             # baselines + linear -> reports/detection/linear.*
+python src/detect/run_transformer.py --epochs 8  # XLM-R -> reports/detection/xlmr.*, models/xlmr_tagger
 ```
 
-## Design
+The protocol is fixed: train on `train` (seen generators only), select epochs
+and thresholds on `dev` **restricted to seen generators**, and report on `test`
+overall, seen, and held-out.
 
-**Cleaning source.** Cleaning runs on `raw_mediawiki`, not the shipped `text`
-column. `text` still leaks `Category:` lines, `{{#ifexpr}}` residue and
-`__NOTOC__` markers, and it flattens list bullets into leading spaces, which
-corrupts sentence segmentation.
+### 3. Counterfactual twin training
 
-**One segmenter everywhere.** `src/segment.py::segment_sentences` is used for
-source prep, generation length targets, labelling and evaluation, so a
-"sentence index" means the same thing at every stage. It splits on `.`, `?`,
-`!`, `෴` and `…` with guards for abbreviations, decimals, Latin initials,
-ellipses and quoted sentences. Note that a lone Sinhala letter before a full
-stop is the sentence-final particle (`… සම්මාන ය.`), *not* an initial —
-treating it as one silently merges sentences.
+```bash
+# twins with paired margin and consistency terms, 2-epoch warm-up
+python src/detect/run_transformer.py --epochs 8 --twins --twin-warmup 2 --tag twin_warm
 
-**Split before generation.** The 70/15/15 partition is over *source article
-ids*, written before any API call. Every derivative — all construction types,
-all generators — inherits its source's partition, so no sentence from a train
-article can appear in dev or test. Seen generators (DeepSeek V3, Mistral Nemo)
-write to all three splits; the held-out generator (Gemini 2.5 Pro) writes only
-to dev and test. `build_dataset.py` re-checks both rules.
+# ablation: twins as plain extra human documents
+python src/detect/run_transformer.py --epochs 8 --twins --tag twin_plain \
+    --margin-weight 0 --consistency-weight 0
 
-**Two primitives only.**
+# re-score a saved model (adds twin metrics) without retraining
+python src/detect/run_transformer.py --eval-only models/xlmr_tagger --tag xlmr_rescored
 
-- *Continuation* (Type 1): a human prefix is kept, the true human remainder is
-  discarded, and the model writes a new continuation. One boundary.
-- *Context-aware span replacement* (Types 2 and 3): an existing human span is
-  handed to the model with its left/right context and rewritten in place.
-  Never insertion of invented sentences — the AI text occupies exactly the
-  position the human text did. Two boundaries per span.
-
-For Type 3, each span is generated **independently from the original human
-document** — span 2 is never conditioned on span 1's output — and all spans in
-a document use the same generator.
-
-**Validation.** Seven automatic checks (sentence count, length ±25%, no
-preamble, no markdown, predominantly Sinhala script, not a copy of the
-original, numbers unchanged). Failures are retried up to 3 times from scratch;
-model output is **never hand-repaired**. Every rejection is logged with reasons
-to `logs/rejected.jsonl`.
-
-**Reasoning models.** For any reasoning-capable generator the client sends
-`reasoning: {exclude: true}` *and* reads only `message.content`, never
-`message.reasoning`, so a reasoning trace cannot reach the stored text even if
-a provider ignores the flag.
-
-**Resumability.** Records are keyed by a deterministic `record_id`
-(`{window_id}__{type}__{generator}`). A re-run skips ids already present in
-`generated/*.jsonl`, so an interrupted run continues rather than regenerating.
-
-## Layout
-
-```
-config.yaml                    all knobs: models, sizes, ranges, seeds, paths
-prompts/task2_prompts.yaml     Sinhala prompt templates per domain x primitive
-src/inspect_data.py            load + profile the parquet
-src/clean.py                   page-type filter + markup strip + prose gate
-src/segment.py                 THE deterministic Sinhala segmenter
-src/window.py                  contiguous passage windowing
-src/split.py                   source-level 70/15/15 split
-src/openrouter.py              API client: retries, backoff, cost logging
-src/generate.py                Type 1/2/3 construction + orchestration
-src/validate.py                the 7 validation checks
-src/build_dataset.py           assemble records, verify integrity
-src/audit.py                   balance + boundary-position plots
-sources/human_sources.jsonl    cleaned human articles
-sources/windows.jsonl          windowed passages
-generated/*.jsonl              per-type records + combined.jsonl
-logs/                          generations.jsonl, rejected.jsonl, cost.jsonl
-splits/                        train/dev/test source id lists
-reports/                       pilot_report.md, audit.md, plots
-tests/                         unit tests
+# compare saved models across all decision thresholds
+python src/detect/twin_tradeoff.py base=models/xlmr_tagger \
+    twin_plain=models/xlmr_twin_plain twin_warm=models/xlmr_twin_warm
 ```
 
-## Record schema
+`--tag NAME` writes `reports/detection/NAME.{md,json}` and saves the model to
+`models/xlmr_NAME`. `--limit N` runs a quick smoke test on N documents.
 
-One JSON object per generated document in `generated/combined.jsonl`:
+### 4. Try the detector
+
+```bash
+python src/serve.py        # http://127.0.0.1:5000
+```
+
+Paste Sinhala text and each sentence is labelled human or machine. The model
+runs locally, so text never leaves the machine.
+
+### Figures and tests
+
+```bash
+python src/make_figures.py && python src/make_abd_figures.py   # -> reports/figures/
+python -m pytest tests/ -q
+```
+
+## Record format
+
+One JSON object per document in `generated/combined.jsonl`:
 
 | field | meaning |
 |---|---|
 | `record_id` | `{window_id}__{type}__{generator}`, stable across runs |
-| `source_id` | originating Wikipedia page id |
-| `domain` | `wikipedia` |
-| `generator` / `generator_slug` / `generator_role` | which model wrote the AI spans; `seen` or `held_out` |
-| `construction_type` | `type1_single_boundary` / `type2_single_internal_segment` / `type3_multiple_internal_segments` |
-| `split` | `train` / `dev` / `test`, inherited from `source_id` |
-| `text` | the assembled document (`" ".join(sentences)`) |
-| `sentences[]` | sentence list, from the shared segmenter |
-| `labels[]` | `0` human / `1` AI, parallel to `sentences` |
-| `boundaries[]` | indices where the label changes |
-| `boundary_position_normalized` | first boundary / number of sentences |
-| `spans` | replaced sentence ranges (Types 2/3) |
-| `prompt_id` | template that produced the AI text |
-| `raw_output` / `cleaned_output` | model output before/after packaging strip |
-| `temperature` / `top_p` / `retry_count` | generation settings and retries used |
-| `validation_passed` / `validation_errors[]` | validator verdict |
+| `source_id`, `window_id` | originating article and window |
+| `generator`, `generator_role` | model that wrote the machine text; `seen` or `held_out` |
+| `construction_type` | `type1_single_boundary`, `type2_single_internal_segment`, `type3_multiple_internal_segments` |
+| `split` | `train`, `dev` or `test`, inherited from the source article |
+| `sentences[]`, `labels[]` | sentences and parallel `0`/`1` labels |
+| `boundaries[]` | indices where the label changes (index *i* = between *i−1* and *i*) |
+| `spans` | replaced sentence ranges (Types 2 and 3) |
+| `raw_output`, `cleaned_output` | model output before and after packaging removal |
+| `prompt_id`, `temperature`, `top_p`, `retry_count` | generation settings |
+| `validation_passed`, `validation_errors[]` | validator verdict |
 
-## Configuration
+## Reports
 
-Everything tunable lives in `config.yaml` — model slugs and prices, sampling
-bands, span sizes, prose-gate thresholds, validation tolerances, pilot and
-full-run sizes, concurrency and backoff. There are no magic numbers in the
-code. Model slugs and prices are re-verified against OpenRouter at the start of
-every run, and price drift is reported.
+| file | contents |
+|---|---|
+| [reports/dataset/audit.md](reports/dataset/audit.md) | class balance and boundary-position audit |
+| [reports/generation/pilot_report.md](reports/generation/pilot_report.md) | generator pilot and cost estimate |
+| [reports/generation/fluency_assessment.md](reports/generation/fluency_assessment.md) | per-generator fluency review, including the rejected Mistral Nemo |
+| [reports/generation/model_comparison.md](reports/generation/model_comparison.md) | the three generators on identical inputs |
+| [reports/detection/linear.md](reports/detection/linear.md) | baselines, linear and likelihood models |
+| [reports/detection/xlmr.md](reports/detection/xlmr.md) | XLM-R tagger (headline model) |
+| [reports/detection/xlmr_likelihood.md](reports/detection/xlmr_likelihood.md) | XLM-R with likelihood features (no gain) |
+| [reports/detection/xlmr_rescored.md](reports/detection/xlmr_rescored.md) | XLM-R re-scored with twin metrics |
+| [reports/detection/twin_plain.md](reports/detection/twin_plain.md) | twins as extra human documents |
+| [reports/detection/twin_warm.md](reports/detection/twin_warm.md) | twin training with paired terms and warm-up |
+| [reports/detection/twin_no_warmup.md](reports/detection/twin_no_warmup.md) | paired terms from step 0: collapsed (kept as a negative result) |
+| [reports/detection/twin_tradeoff.md](reports/detection/twin_tradeoff.md) | all models across all decision thresholds |
+
+## Limitations
+
+Wikipedia is the only domain, and generalisation is measured against a single
+held-out generator. Human sentences carry typographical noise that generator
+output lacks, so part of any detector's score may come from formatting. The
+human text is not guaranteed to predate LLMs, since the source snapshot has no
+revision dates. Transformer results are single-seed, and no human-annotation
+ceiling has been established. Part 5 of the explainer discusses each point.
