@@ -188,6 +188,23 @@ def twin_metrics(docs, twins, pred_mixed, pred_twin,
     }
 
 
+def human_doc_metrics(pred) -> dict:
+    """False alarms on documents that contain no machine text at all.
+
+    `pred` is per-document predicted labels. Every predicted AI sentence is a
+    false positive and every predicted boundary is invented.
+    """
+    n_sent = sum(len(p) for p in pred)
+    return {
+        "n_docs": len(pred),
+        "n_sentences": n_sent,
+        "doc_false_alarm": sum(1 for p in pred if any(p)) / max(1, len(pred)),
+        "boundaries_per_doc": sum(len(boundaries_from_labels(p))
+                                  for p in pred) / max(1, len(pred)),
+        "sentence_fpr": sum(sum(p) for p in pred) / max(1, n_sent),
+    }
+
+
 def fmt_row(name: str, m: dict) -> str:
     s, b0, bt = m["sentence"], m["boundary_exact"], m["boundary_tol"]
     return (f"| {name} | {s['accuracy']:.3f} | {s['f1_ai']:.3f} | "

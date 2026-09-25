@@ -46,11 +46,18 @@ METRICS = [
     ("exact-boundary F1, mixed + twins, held-out",
      ("test_twins", "threshold", "held_out", "combined_boundary_exact", "f1"),
      True),
+    ("unrelated-human false-alarm rate",
+     ("test_unrelated_human", "threshold", "doc_false_alarm"), False),
+    ("boundaries per unrelated human doc",
+     ("test_unrelated_human", "threshold", "boundaries_per_doc"), False),
 ]
 
 
 def _get(d, path):
+    """The metric at `path`, or NaN for runs that predate it."""
     for k in path:
+        if k not in d:
+            return float("nan")
         d = d[k]
     return float(d)
 
@@ -69,6 +76,8 @@ def load(runs):
 
 def fmt(xs) -> str:
     xs = np.asarray(xs)
+    if np.isnan(xs).any():
+        return "—"
     sd = xs.std(ddof=1) if len(xs) > 1 else 0.0
     return f"{xs.mean():.3f} ± {sd:.3f}"
 
@@ -111,7 +120,8 @@ def main() -> None:
         if paired:
             diff = np.array(entry[names[0]]) - np.array(entry[names[1]])
             wins = int(((diff > 0) if higher else (diff < 0)).sum())
-            row += f" | {fmt(diff)} | {wins}/{len(diff)} seeds"
+            row += (f" | {fmt(diff)} | {wins}/{len(diff)} seeds"
+                    if not np.isnan(diff).any() else " | — | —")
             entry["paired_diff"] = diff.tolist()
         L.append(row + " |")
         summary[lbl] = entry

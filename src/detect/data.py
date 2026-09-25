@@ -8,6 +8,7 @@ sentence i-1 and sentence i.
 """
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -149,6 +150,118 @@ def load_twins(docs: list[Doc], cfg: dict | None = None,
             sentences=list(ws), labels=[0] * d.n, window_id=d.window_id))
         weights.append(1.0 / uses[d.window_id])
     return twins, weights
+
+
+def unused_windows(cfg: dict | None = None, split: str = "train",
+                   path=None) -> list[dict]:
+    """Source windows of `split` articles that no generated record draws on.
+
+    An article is excluded if any record, in any split, uses it, so these
+    windows share no text with any mixed document. Sorted by window_id so
+    sampling from them is reproducible.
+    """
+    cfg = cfg or load_config()
+    paths = cfg["paths"]
+    path = path or Path(paths["sources"]).parent / "windows.jsonl"
+    ids = set((Path(paths["splits_dir"]) / f"{split}_source_ids.txt")
+              .read_text(encoding="utf-8").split())
+    used = {r["source_id"] for r in
+            read_jsonl(Path(paths["generated_dir"]) / "combined.jsonl")}
+    return sorted((w for w in read_jsonl(path)
+                   if w["source_id"] in ids and w["source_id"] not in used),
+                  key=lambda w: w["window_id"])
+
+
+def load_unrelated_human(cfg: dict | None = None, split: str = "test",
+                         path=None) -> list[Doc]:
+    """All-human documents from `split` articles that no record uses.
+
+    A false-alarm test set with no content link to any mixed document, so it
+    does not favour a model trained on content-matched twins.
+    """
+    return [Doc(record_id=w["window_id"], source_id=w["source_id"],
+                split=split, generator="", construction_type="",
+                sentences=list(w["sentences"]),
+                labels=[0] * len(w["sentences"]), window_id=w["window_id"])
+            for w in unused_windows(cfg, split, path)]
+
+
+def load_unrelated_twins(docs: list[Doc], cfg: dict | None = None,
+                         seed: int = 0, path=None
+                         ) -> tuple[list[Doc], list[float]]:
+    """An unrelated all-human stand-in for each document's twin.
+
+    The control for `load_twins`: the same amount and weighting of human text,
+    but not content-matched. Each distinct window used by `docs` is mapped to a
+    distinct train-split window from an article no record uses, with exactly
+    the same number of sentences (collate_pairs pairs sentences by index),
+    sampled without replacement with `seed`. Documents that share a window
+    share its stand-in and keep load_twins' 1/k weight.
+
+    Raises rather than changing a length if some length runs out.
+    """
+    from collections import Counter, defaultdict
+    import random
+    if any(not d.window_id for d in docs):
+        raise ValueError("documents carry no window_id; rebuild combined.jsonl")
+    uses = Counter(d.window_id for d in docs)
+    length = {}
+    for d in docs:
+        if length.setdefault(d.window_id, d.n) != d.n:
+            raise ValueError(f"window {d.window_id} backs documents of "
+                             f"different lengths")
+    pool = defaultdict(list)
+    for w in unused_windows(cfg, "train", path):
+        pool[len(w["sentences"])].append(w)
+    need = defaultdict(list)
+    for wid in sorted(uses):
+        need[length[wid]].append(wid)
+    short = {n: len(ws) - len(pool[n]) for n, ws in need.items()
+             if len(ws) > len(pool[n])}
+    if short:
+        raise ValueError(
+            f"not enough unrelated windows: {sum(short.values())} missing ("
+            + ", ".join(f"{k} at length {n}" for n, k in sorted(short.items()))
+            + ")")
+    rng = random.Random(seed)
+    pick = {}
+    for n in sorted(need):
+        for wid, w in zip(need[n], rng.sample(pool[n], len(need[n]))):
+            pick[wid] = w
+    twins, weights = [], []
+    for d in docs:
+        w = pick[d.window_id]
+        twins.append(Doc(
+            record_id=d.record_id + "__unrelated", source_id=w["source_id"],
+            split=d.split, generator=d.generator,
+            construction_type=d.construction_type,
+            sentences=list(w["sentences"]), labels=[0] * d.n,
+            window_id=w["window_id"]))
+        weights.append(1.0 / uses[d.window_id])
+    return twins, weights
+
+
+# Formatting that Wikipedia sentences carry and generator output lacks
+# (docs/limitations.md). U+200D (ZWJ) is kept: Sinhala conjuncts need it.
+_INVISIBLE = dict.fromkeys(map(ord, "​‌⁠﻿­"))
+_QUOTES = str.maketrans({"‘": "'", "’": "'", "‚": "'",
+                         "‛": "'", "“": '"', "”": '"',
+                         "„": '"', "‟": '"'})
+_SPACE_BEFORE_PUNCT = re.compile(r"\s+([.,?!:;])")
+FINAL_PUNCT = (".", "?", "!", "෴", "…")     # . ? ! ෴ …
+
+
+def normalize_surface(s: str) -> str:
+    """Remove the surface cues that separate human from machine sentences.
+
+    Applied identically to every sentence of both classes. Parentheses and
+    Latin text are content, not formatting, and are left alone.
+    """
+    s = s.translate(_INVISIBLE).translate(_QUOTES)
+    s = _SPACE_BEFORE_PUNCT.sub(r"\1", s).rstrip()
+    if s and not s.endswith(FINAL_PUNCT):
+        s += "."
+    return s
 
 
 def role_map(cfg: dict) -> dict[str, str]:

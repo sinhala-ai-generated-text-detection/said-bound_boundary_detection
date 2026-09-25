@@ -38,6 +38,20 @@ Continue training a saved tagger, with or without twins:
 
     python src/detect/run_transformer.py --init-from models/xlmr_tagger \\
         --epochs 3 --lr 1e-5 --twins --tag twin_ft
+
+Is it the twin, or any human text? Unrelated human windows of the same length
+in place of the twins (tagging loss only; the paired terms need alignment):
+
+    python src/detect/run_transformer.py --init-from models/xlmr_tagger \\
+        --epochs 3 --lr 1e-5 --twins --twin-source unrelated \\
+        --margin-weight 0 --consistency-weight 0 --tag ft_unrelated_s42
+
+Every run is also scored on unrelated human test documents (test-split
+articles no record uses). --normalize-surface re-scores with the formatting
+cues of docs/limitations.md removed from every sentence:
+
+    python src/detect/run_transformer.py --eval-only models/xlmr_tagger \\
+        --normalize-surface --tag xlmr_normsurface
 """
 from __future__ import annotations
 
@@ -52,9 +66,11 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from data import load_dataset, load_twins, describe, role_map  # noqa: E402
-from metrics import (boundary_metrics, evaluate, sentence_metrics,  # noqa: E402
-                     twin_metrics)
+from data import (describe, load_dataset, load_twins,  # noqa: E402
+                  load_unrelated_human, load_unrelated_twins,
+                  normalize_surface, role_map)
+from metrics import (boundary_metrics, evaluate,  # noqa: E402
+                     human_doc_metrics, sentence_metrics, twin_metrics)
 from utils import force_utf8_stdout, load_config  # noqa: E402
 
 
@@ -119,6 +135,19 @@ def eval_twins(model, docs, twins, rm, threshold: float, bias: float) -> dict:
     return out
 
 
+def eval_human(model, docs, threshold: float, bias: float) -> dict:
+    """False alarms on all-human documents, for both decoders."""
+    if not docs:
+        return {}
+    p = model.predict_proba(docs)
+    return {
+        "threshold": human_doc_metrics(
+            _per_doc(docs, (p >= threshold).astype(int))),
+        "viterbi": human_doc_metrics(
+            _per_doc(docs, model.predict_viterbi(docs, boundary_bias=bias))),
+    }
+
+
 def main() -> None:
     force_utf8_stdout()
     ap = argparse.ArgumentParser()
@@ -142,6 +171,13 @@ def main() -> None:
     ap.add_argument("--twins", action="store_true",
                     help="counterfactual twin training: pair each training "
                          "document with its all-human source window")
+    ap.add_argument("--twin-source", choices=("matched", "unrelated"),
+                    default="matched",
+                    help="with --twins: 'matched' pairs each document with its "
+                         "own source window; 'unrelated' with a train-split "
+                         "window of the same length from an article no record "
+                         "uses (a control for content matching; needs both "
+                         "paired-term weights at 0)")
     ap.add_argument("--margin-weight", type=float, default=1.0,
                     help="weight of the paired margin term (twins only)")
     ap.add_argument("--consistency-weight", type=float, default=1.0,
@@ -157,6 +193,10 @@ def main() -> None:
                          "pretrained encoder")
     ap.add_argument("--eval-only", metavar="MODEL_DIR",
                     help="skip training; score a saved sentence-head model")
+    ap.add_argument("--normalize-surface", action="store_true",
+                    help="strip the formatting cues of docs/limitations.md "
+                         "from every sentence of every document (see "
+                         "data.normalize_surface); meant for --eval-only")
     ap.add_argument("--seed", type=int, default=None,
                     help="training seed (default: the config seed)")
     ap.add_argument("--limit", type=int, default=0,
@@ -170,6 +210,14 @@ def main() -> None:
     ap.add_argument("--json-out")
     ap.add_argument("--out")
     a = ap.parse_args()
+    if a.twin_source == "unrelated":
+        if not a.twins:
+            ap.error("--twin-source unrelated needs --twins")
+        if a.margin_weight != 0 or a.consistency_weight != 0:
+            ap.error("--twin-source unrelated needs --margin-weight 0 and "
+                     "--consistency-weight 0: an unrelated document is not "
+                     "aligned with the mixed one, so the paired terms would "
+                     "compare unrelated sentences")
     if a.eval_only and not a.tag:
         a.tag = "eval"          # never overwrite the trained run's results
     if a.tag:
@@ -201,6 +249,27 @@ def main() -> None:
         train, dev = (type(ds)(x.docs[:a.limit]) for x in (train, dev))
         test = type(ds)(test.docs[:a.limit // 2] + test.docs[-(a.limit // 2):])
     dev_seen = dev.filter(roles=["seen"], role_map=rm)
+    seed = cfg["seed"] if a.seed is None else a.seed
+
+    # Twins are aligned on the raw text, so every document set is loaded
+    # before any surface normalization.
+    tr_twins = tr_weights = None
+    if a.twins:
+        if a.twin_source == "unrelated":
+            tr_twins, tr_weights = load_unrelated_twins(train.docs, cfg, seed)
+        else:
+            tr_twins, tr_weights = load_twins(train.docs, cfg)
+    test_twins, _ = load_twins(test.docs, cfg)
+    test_human = load_unrelated_human(cfg, "test")
+    if a.limit:
+        test_human = test_human[:a.limit]
+    if a.normalize_surface:
+        done = set()
+        for d in (*ds.docs, *test_twins, *test_human, *(tr_twins or [])):
+            if id(d) not in done:
+                done.add(id(d))
+                d.sentences = [normalize_surface(x) for x in d.sentences]
+        print("surface normalization applied to every document")
     describe(train, cfg, "train")
     describe(dev_seen, cfg, "dev (seen only)")
     describe(test, cfg, "test")
@@ -234,7 +303,7 @@ def main() -> None:
         batch_size=a.batch_size, grad_accum=a.grad_accum,
         max_length=a.max_length, fp16=not a.no_fp16,
         class_weight=[w_h, w_ai],
-        seed=cfg["seed"] if a.seed is None else a.seed,
+        seed=seed,
         use_pair_head=use_pair, pair_loss_weight=a.pair_loss_weight,
         pair_pos_weight=a.pair_pos_weight, feat_map=feat_map,
         margin_weight=a.margin_weight,
@@ -278,10 +347,8 @@ def main() -> None:
         """
         return best_bias_on(dev_seen.docs)[1]
 
-    tr_twins = tr_weights = None
     if a.twins:
-        tr_twins, tr_weights = load_twins(train.docs, cfg)
-        print(f"\ntwins: {len(tr_twins)} pairs over "
+        print(f"\ntwins ({a.twin_source}): {len(tr_twins)} pairs over "
               f"{len({t.window_id for t in tr_twins})} windows; "
               f"margin weight {a.margin_weight}, consistency weight "
               f"{a.consistency_weight}, margin {a.twin_margin}, "
@@ -369,7 +436,6 @@ def main() -> None:
         print(f"  {t:36s} F1={per_type[t]['sentence']['f1_ai']:.3f} "
               f"bE={per_type[t]['boundary_exact']['f1']:.3f}")
 
-    test_twins, _ = load_twins(test.docs, cfg)
     twins_res = eval_twins(det, test.docs, test_twins, rm, best_t, best_b)
     print("\n=== TEST: all-human twins ===")
     for dec, by_slice in twins_res.items():
@@ -382,14 +448,24 @@ def main() -> None:
                   f"ctx={m['context_stability']:.3f} "
                   f"bE+twins={m['combined_boundary_exact']['f1']:.3f}")
 
+    human_res = eval_human(det, test_human, best_t, best_b)
+    print(f"\n=== TEST: unrelated human documents ({len(test_human)}) ===")
+    for dec, m in human_res.items():
+        print(f"  {dec:9s} false-alarm={m['doc_false_alarm']:.3f} "
+              f"bnd/doc={m['boundaries_per_doc']:.2f} "
+              f"sentFPR={m['sentence_fpr']:.3f}")
+
     payload = {
         "model": a.model, "epochs": a.epochs, "lr": a.lr,
-        "seed": cfg["seed"] if a.seed is None else a.seed,
+        "seed": seed,
         "eval_only": a.eval_only, "init_from": a.init_from,
-        "twins": {"enabled": a.twins, "margin_weight": a.margin_weight,
+        "normalize_surface": a.normalize_surface,
+        "twins": {"enabled": a.twins, "source": a.twin_source,
+                  "margin_weight": a.margin_weight,
                   "consistency_weight": a.consistency_weight,
                   "margin": a.twin_margin, "warmup_epochs": a.twin_warmup},
         "test_twins": twins_res,
+        "test_unrelated_human": human_res,
         "batch_size": a.batch_size, "grad_accum": a.grad_accum,
         "use_pair_head": use_pair,
         "likelihood_features": bool(feat_map),
@@ -470,6 +546,16 @@ def write_report(path: Path, p: dict) -> None:
                  f"**exact-boundary F1**). Tuning the cut for sentence F1 and "
                  f"then reporting boundary F1 optimises the wrong objective.")
     L.append("")
+    if p.get("normalize_surface"):
+        L.append("**Surface-normalized.** Every sentence of every document "
+                 "(both classes, dev and test, twins and human documents) "
+                 "had whitespace before punctuation, zero-width characters "
+                 "other than ZWJ and soft hyphens removed, curly quotes "
+                 "straightened and a final full stop added where missing "
+                 "(`data.normalize_surface`). Parentheses and Latin text are "
+                 "content and were left alone. Threshold and bias were "
+                 "re-tuned on the normalized dev set.")
+        L.append("")
 
     L.append("## Test results")
     L.append("")
@@ -504,7 +590,10 @@ def write_report(path: Path, p: dict) -> None:
                  "the mixed documents and the twins together.")
         L.append("")
         if tw["enabled"]:
-            L.append(f"Trained with counterfactual twins: margin weight "
+            src = ("unrelated same-length human windows"
+                   if tw.get("source") == "unrelated" else
+                   "counterfactual twins")
+            L.append(f"Trained with {src}: margin weight "
                      f"{tw['margin_weight']}, consistency weight "
                      f"{tw['consistency_weight']}, margin {tw['margin']}.")
             L.append("")
@@ -521,6 +610,23 @@ def write_report(path: Path, p: dict) -> None:
                          f"{m['paired_flip_rate']:.3f} | "
                          f"{m['context_stability']:.3f} | "
                          f"{m['combined_boundary_exact']['f1']:.3f} |")
+        L.append("")
+
+    if p.get("test_unrelated_human"):
+        hu = p["test_unrelated_human"]
+        L.append("## Unrelated human documents")
+        L.append("")
+        L.append(f"All {hu['threshold']['n_docs']} source windows of test-"
+                 f"split articles that no mixed document uses: human text "
+                 f"with no content link to any training or test document.")
+        L.append("")
+        L.append("| decoder | docs | false alarm | boundaries/doc | "
+                 "sentence FPR |")
+        L.append("|---|---|---|---|---|")
+        for dec, m in hu.items():
+            L.append(f"| {dec} | {m['n_docs']} | {m['doc_false_alarm']:.3f} "
+                     f"| {m['boundaries_per_doc']:.2f} | "
+                     f"{m['sentence_fpr']:.3f} |")
         L.append("")
 
     if lin:
