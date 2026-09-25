@@ -361,6 +361,57 @@ def fig_conditions(theme: str) -> None:
     save(fig, "fig6-conditions", theme)
 
 
+# ------------------------------------------- 7. English replication ---
+def fig_english(theme: str) -> None:
+    """SemEval-2024 Subtask C: same encoding as fig5 and fig6."""
+    s = json.loads((ROOT / "results" / "replication" / "semeval_c" /
+                    "seeds.json").read_text(encoding="utf-8"))["metrics"]
+    panels = [
+        ("false alarm, ASAP reviews (%)",
+         "Human peer reviews\nwith a false alarm (%)", "{:.0f}%", (0, 105)),
+        ("false alarm, OUTFOX essays (%)",
+         "Human student essays\nwith a false alarm (%)", "{:.0f}%", (0, 105)),
+        ("test MAE", "Subtask C test MAE\n(words; lower is better)", "{:.1f}",
+         None),
+    ]
+    groups = [("A", "A: official\ntraining data"),
+              ("B", "B: + unrelated\nhuman reviews"),
+              ("C", "C: + human\noriginals")]
+    fig, axes = plt.subplots(1, 3, figsize=(9.8, 3.8))
+    for ax, (key, title, fmt, ylim) in zip(axes, panels):
+        for j, ((g, _), color) in enumerate(zip(groups, T["series"])):
+            vals = np.array(s[key][g])
+            m, sd = vals.mean(), vals.std(ddof=1)
+            ax.plot([j, j], [m - sd, m + sd], color=color, linewidth=2,
+                    solid_capstyle="round", zorder=2)
+            ax.plot(j, m, "o", ms=10, color=color,
+                    markeredgecolor=T["surface"], markeredgewidth=2, zorder=4)
+            ax.scatter(np.full(len(vals), j + 0.22), vals, s=20,
+                       facecolor=T["surface"], edgecolor=color, linewidth=1.3,
+                       zorder=3)
+            ax.annotate(fmt.format(m), (j, m), xytext=(-9, 0),
+                        textcoords="offset points", ha="right", va="center",
+                        fontsize=8.5, color=T["ink2"])
+        ax.set_xticks(range(len(groups)))
+        ax.set_xticklabels([g[1] for g in groups], fontsize=8.5)
+        ax.set_xlim(-0.8, len(groups) - 0.4)
+        if ylim:
+            ax.set_ylim(*ylim)
+        else:
+            lo = min(min(s[key][g]) for g, _ in groups)
+            hi = max(max(s[key][g]) for g, _ in groups)
+            pad = (hi - lo) * 0.35
+            ax.set_ylim(lo - pad, hi + pad)
+        ax.set_title(title, loc="left", fontsize=10)
+        recessive(ax)
+    fig.tight_layout(w_pad=2.0)
+    fig.text(0.01, -0.03, "English, SemEval-2024 Task 8 Subtask C, "
+             "DeBERTa-v3  ·  large dot: mean of 3 seeds  ·  line: ±1 standard "
+             "deviation  ·  small dots: individual seeds", fontsize=8.5,
+             color=T["ink2"])
+    save(fig, "fig7-english", theme)
+
+
 def main() -> None:
     for theme in THEMES:
         style(theme)
@@ -370,6 +421,7 @@ def main() -> None:
         fig_tradeoff(theme)
         fig_seeds(theme)
         fig_conditions(theme)
+        fig_english(theme)
 
 
 if __name__ == "__main__":

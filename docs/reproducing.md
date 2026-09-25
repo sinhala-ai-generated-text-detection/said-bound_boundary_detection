@@ -1,6 +1,6 @@
 # Reproducing
 
-[README](../README.md) · [Dataset](dataset.md) · [Detectors](detectors.md) · [Likelihood](likelihood.md) · [Counterfactual twins](counterfactual-twins.md) · [Limitations](limitations.md) · [Reproducing](reproducing.md)
+[README](../README.md) · [Dataset](dataset.md) · [Detectors](detectors.md) · [Likelihood](likelihood.md) · [Counterfactual twins](counterfactual-twins.md) · [English replication](english-replication.md) · [Limitations](limitations.md) · [Reproducing](reproducing.md)
 
 Every number in the README and these pages comes from a result file under
 `results/`, and every figure is regenerated from those files by
@@ -53,6 +53,7 @@ needs no API access.
 | `docs/assets/`: the figures | `logs/`: API, cost and rejection logs |
 | | `models/`: fine-tuned checkpoints (1.1 GB each) |
 | | `cache/`: likelihood features |
+| | `data/english/`: third-party English replication data, predictions |
 
 The splits are versioned so that anyone rebuilding the dataset gets the same
 partition of source articles.
@@ -201,6 +202,42 @@ python -m pytest tests/ -q
 python src/app/serve.py                 # try the tagger at http://127.0.0.1:5000
 ```
 
+### 6. English replication
+
+SemEval-2024 Task 8 Subtask C ([English replication](english-replication.md)).
+The data is third-party and lives in the gitignored `data/english/`.
+`fetch_data.sh` needs `gdown` (a separate environment is fine) and checks
+every download against its sha256.
+
+```bash
+bash src/replication/semeval_c/fetch_data.sh                  # -> data/english/
+python src/replication/semeval_c/corpus.py                    # -> data/english/processed/
+python src/replication/semeval_c/data_report.py --out results/replication/semeval_c/data_report
+python src/replication/semeval_c/token_lengths.py --out results/replication/semeval_c/token_lengths
+
+R="python src/replication/semeval_c/run.py --epochs 5 --lr 2e-5 --batch-size 8"
+for s in 42 43 44; do
+  for c in control human twins; do
+    $R --condition $c --seed $s --tag deberta_${c}_s$s
+  done
+done
+for c in control human twins; do          # one XLM-R seed per condition
+  $R --condition $c --seed 42 --model xlm-roberta-base --tag xlmr_${c}_s42
+done
+
+g() { echo "$1=deberta_$2_s42,deberta_$2_s43,deberta_$2_s44"; }
+python src/replication/semeval_c/summarize.py $(g A control) $(g B human) \
+    $(g C twins) --pairs B-A C-A C-B --out results/replication/semeval_c/seeds
+python src/replication/semeval_c/sweep.py \
+    $(for c in control human twins; do for s in 42 43 44; do echo deberta_${c}_s$s; done; done) \
+    xlmr_control_s42 xlmr_human_s42 xlmr_twins_s42 \
+    --out results/replication/semeval_c/threshold_sweep
+```
+
+Each run writes `results/replication/semeval_c/<tag>.{md,json}` and its word
+probabilities to `data/english/preds/<tag>.pkl`, which the sweep reads; no
+model checkpoint is kept.
+
 ## Runtimes and cost
 
 Measured on the hardware above. Wall time includes loading and test scoring.
@@ -216,6 +253,13 @@ Measured on the hardware above. Wall time includes loading and test scoring.
 | re-scoring a saved model (`--eval-only`) | ~1.5 min | ~0.9 min |
 | threshold sweep over 13 models | | 3 min |
 | the four-condition experiment (12 runs), end to end | | 2 h 17 min |
+| English data build (`corpus.py`) | | 17 s |
+| Subtask C, DeBERTa-v3, 5 epochs, control (3,649 documents) | | 21.6–21.8 min (3.4 min per epoch) |
+| Subtask C, DeBERTa-v3, 5 epochs, + 1,831 human documents | | 30.8–31.1 min (5.3 min per epoch) |
+| Subtask C test and human-set scoring, per run | | 4.3 min |
+| Subtask C, 9 DeBERTa-v3 runs, end to end | | 4 h 11 min |
+| Subtask C, XLM-R, 5 epochs, control / + human documents | | 11.7 min / 16.9–17.0 min |
+| all 12 Subtask C runs, end to end | | 4 h 56 min |
 
 Twin training runs twice as many documents per epoch as the baseline, since
 every document is paired with its twin.

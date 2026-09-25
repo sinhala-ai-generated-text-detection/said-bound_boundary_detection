@@ -7,7 +7,7 @@ fine-tuned XLM-RoBERTa tagger, and counterfactual-twin training for purely human
 [![Python](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](docs/reproducing.md#environment)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.6%20·%20CUDA%2012.4-EE4C2C?logo=pytorch&logoColor=white)](docs/reproducing.md#environment)
 [![Transformers](https://img.shields.io/badge/transformers-5.16-FFD21E)](docs/reproducing.md#environment)
-[![Tests](https://img.shields.io/badge/tests-131%20passing-1baf7a)](tests/)
+[![Tests](https://img.shields.io/badge/tests-139%20passing-1baf7a)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Every document mixes human sentences with sentences written by a large language model. Each
@@ -32,6 +32,11 @@ The task is to recover those boundaries from the text alone.
   human documents of the same length get most of the way (60%)**. Content matching and the
   paired losses it enables add a smaller, consistent gain: 2–5 points of false alarms with
   threshold decoding, 13–15 with Viterbi decoding.
+- **The false-alarm problem is not specific to Sinhala.** On the English SemEval-2024
+  Task 8 boundary task (Subtask C), a DeBERTa-v3 tagger trained on the official data flags
+  machine text in **74%** of human peer reviews and **89%** of human student essays. Adding
+  about half as many human-only documents cuts that to **3–5% and 14%** on every seed, but
+  raises test MAE from 17.1 to 19.6–20.1 words: a larger cost than in Sinhala.
 - **Language-model likelihood transfers across generators.** On the unseen generator, a
   detector given only likelihood features, and no text, beats character n-grams on sentence
   F1 (0.588 vs 0.571).
@@ -86,6 +91,17 @@ unrelated human text gives most of the reduction. Content-matched twins, and the
 losses they make possible, lower false alarms further on every seed, most clearly with
 Viterbi decoding, at about one point of mixed-document F1.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/fig7-english-dark.png">
+  <img alt="English SemEval-2024 Subtask C, three seeds. Human peer reviews with a false alarm: official training data 74%, plus unrelated human reviews 3%, plus human originals 5%. Human student essays: 89%, 14%, 14%. Test MAE: 17.1, 20.1, 19.6." src="docs/assets/fig7-english-light.png">
+</picture>
+
+**English replication.** SemEval-2024 Task 8 Subtask C, in its native word-level form. The
+tagger trained on the official data flags most human documents; adding unrelated human reviews
+(B) or the reviews the training documents were cut from (C), in equal amounts, removes almost
+all of those false alarms, including on essays, a genre absent from training. B and C are
+level, so content matching adds nothing here. The price is about 3 words of MAE.
+
 ### At a glance
 
 | | Question | Answer | Evidence |
@@ -98,6 +114,8 @@ Viterbi decoding, at about one point of mixed-document F1.
 | **6** | At what cost on mixed documents? | About 1 point exact-boundary F1 | [twin_ft_seeds](results/detection/twins/twin_ft_seeds.md) |
 | **7** | Is it the twin, or any human text? | Mostly any human text: unrelated 60% vs twins 58%; twins add 2–5 points (threshold), 13–15 (Viterbi) | [four_conditions](results/detection/twins/four_conditions.md) |
 | **8** | Do formatting cues drive the scores? | No: removing them changes F1 by ≤ 1.2 points | [surface_noise](results/detection/surface_noise.md) |
+| **9** | Does the false-alarm problem hold in English? | Yes: 74–89% of human documents flagged (SemEval-2024 Subtask C) | [seeds](results/replication/semeval_c/seeds.md) |
+| **10** | Does human-only training data fix it there? | Yes: to 3–14%, 3/3 seeds, but test MAE rises 17.1 → 19.6–20.1 | [seeds](results/replication/semeval_c/seeds.md) |
 
 ## Dataset
 
@@ -145,20 +163,22 @@ development data restricted to seen generators, and report on test overall, seen
 ├── src/
 │   ├── dataset/            # cleaning, segmentation, windowing, splits, generation, validation
 │   ├── detect/             # baselines, linear, likelihood, XLM-R tagger, twin training and analysis
+│   ├── replication/        # English replication on SemEval-2024 Task 8 Subtask C
 │   ├── app/serve.py        # local web demo of the tagger
 │   ├── segment.py          # the single Sinhala sentence segmenter, shared by every stage
 │   └── utils.py
 ├── results/
 │   ├── dataset/            # dataset audit
 │   ├── generation/         # generator pilot, fluency review, cross-model comparison, evidence
-│   └── detection/
-│       ├── baselines/      # trivial, positional and linear detectors
-│       ├── xlmr/           # the XLM-R tagger, with and without likelihood features
-│       └── twins/          # counterfactual-twin runs, seeds, threshold sweep
+│   ├── detection/
+│   │   ├── baselines/      # trivial, positional and linear detectors
+│   │   ├── xlmr/           # the XLM-R tagger, with and without likelihood features
+│   │   └── twins/          # counterfactual-twin runs, seeds, threshold sweep
+│   └── replication/        # English replication runs, seeds, threshold sweep
 ├── docs/                   # methodology pages
 │   ├── assets/             #   figures (light and dark)
 │   └── scripts/make_figures.py  # regenerates every figure from results/
-├── tests/                  # 131 unit tests
+├── tests/                  # 139 unit tests
 ├── splits/                 # train/dev/test source-article ids
 ├── prompts/                # Sinhala prompt templates
 ├── config.yaml             # every tunable setting
@@ -197,6 +217,7 @@ order and runtimes.
 | [Likelihood features](docs/likelihood.md) | Masked-LM likelihood as a detection signal, and why it is redundant inside XLM-R |
 | [Counterfactual twins](docs/counterfactual-twins.md) | False alarms on human text, twin training, the collapse and its fix, seeds, operating points, twins versus unrelated human text |
 | [Limitations](docs/limitations.md) | Surface noise and its measured effect, positional and length priors, selection protocol, scope |
+| [English replication](docs/english-replication.md) | SemEval-2024 Subtask C: data provenance, false alarms on human text, human-only training data |
 | [Reproducing](docs/reproducing.md) | Environment, what is versioned, run order, runtimes |
 
 ## Limitations

@@ -1,6 +1,6 @@
 # Limitations and threats to validity
 
-[README](../README.md) · [Dataset](dataset.md) · [Detectors](detectors.md) · [Likelihood](likelihood.md) · [Counterfactual twins](counterfactual-twins.md) · [Limitations](limitations.md) · [Reproducing](reproducing.md)
+[README](../README.md) · [Dataset](dataset.md) · [Detectors](detectors.md) · [Likelihood](likelihood.md) · [Counterfactual twins](counterfactual-twins.md) · [English replication](english-replication.md) · [Limitations](limitations.md) · [Reproducing](reproducing.md)
 
 **Surface noise in the human text ("cleaner text = AI").** Sinhala Wikipedia
 carries typographical noise that generator output lacks. Measured over all
