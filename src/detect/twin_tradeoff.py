@@ -8,7 +8,10 @@ text. This sweeps the decision threshold for every saved model and reports:
 * the full test trade-off curve (mixed exact-boundary F1 vs twin false alarm),
 * each model at matched false-alarm levels, and
 * a *deployment-aware* selection: threshold chosen on dev-seen mixed documents
-  plus their twins, scored as exact-boundary F1 over both together.
+  plus their twins, scored as exact-boundary F1 over both together, and
+* the same matched-false-alarm view measured on unrelated human test documents
+  (test-split articles no record uses), which has no content link to the
+  twins a model may have been trained on.
 
 Inference only; nothing is trained.
 
@@ -26,8 +29,10 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from data import load_dataset, load_twins, role_map  # noqa: E402
-from metrics import boundary_metrics, twin_metrics  # noqa: E402
+from data import (load_dataset, load_twins,  # noqa: E402
+                  load_unrelated_human, role_map)
+from metrics import (boundary_metrics, human_doc_metrics,  # noqa: E402
+                     twin_metrics)
 from run_transformer import _per_doc  # noqa: E402
 from utils import force_utf8_stdout, load_config  # noqa: E402
 
@@ -80,6 +85,7 @@ def main() -> None:
     test = ds.filter(split="test")
     dev_tw, _ = load_twins(dev.docs, cfg)
     test_tw, _ = load_twins(test.docs, cfg)
+    test_hu = load_unrelated_human(cfg, "test")
     held = [i for i, d in enumerate(test.docs)
             if rm.get(d.generator) == "held_out"]
 
@@ -89,7 +95,8 @@ def main() -> None:
         det = TransformerDetector(use_pair_head=False).load(path)
         P = {}
         for key, docs in (("dev", dev.docs), ("dev_tw", dev_tw),
-                          ("test", test.docs), ("test_tw", test_tw)):
+                          ("test", test.docs), ("test_tw", test_tw),
+                          ("test_hu", test_hu)):
             P[key] = _per_doc(docs, det.predict_proba(docs), float)
         del det
         torch.cuda.empty_cache()
@@ -107,6 +114,22 @@ def main() -> None:
                     "dev": dev_rows[j], "test": test_rows[j],
                     "held_out": held_rows[j]}
 
+        hu_rows = []
+        for r in test_rows:
+            m = human_doc_metrics([(np.asarray(p) >= r["threshold"])
+                                   .astype(int).tolist()
+                                   for p in P["test_hu"]])
+            hu_rows.append({"threshold": r["threshold"],
+                            "mixed_bE": r["mixed_bE"],
+                            "false_alarm": m["doc_false_alarm"],
+                            "boundaries_per_doc": m["boundaries_per_doc"],
+                            "sentence_fpr": m["sentence_fpr"]})
+        matched_hu = {}
+        for lvl in ALARM_LEVELS:
+            ok = [r for r in hu_rows if r["false_alarm"] <= lvl]
+            matched_hu[str(lvl)] = (max(ok, key=lambda r: r["mixed_bE"])
+                                    if ok else None)
+
         matched = {}
         for lvl in ALARM_LEVELS:
             ok = [r for r in test_rows if r["false_alarm"] <= lvl]
@@ -117,6 +140,9 @@ def main() -> None:
             "select_mixed": pick("mixed_bE"),
             "select_deploy": pick("combined_bE"),
             "matched_false_alarm": matched,
+            "matched_unrelated_false_alarm": matched_hu,
+            "n_unrelated_human": len(test_hu),
+            "unrelated_human_curve": hu_rows,
             "test_curve": test_rows, "held_out_curve": held_rows,
             "dev_curve": dev_rows,
         }
@@ -181,6 +207,23 @@ def write_report(path: Path, out: dict) -> None:
             cells.append(f"{m['mixed_bE']:.3f} (thr {m['threshold']:.2f})"
                          if m else "unreachable")
         L.append(f"| {name} | " + " | ".join(cells) + " |")
+    n_hu = next(iter(out.values())).get("n_unrelated_human", 0)
+    L += ["", "## The same, against unrelated human documents", "",
+          f"As above, but the false-alarm rate is measured on the {n_hu} "
+          "test-split windows that no mixed document uses, instead of the "
+          "twins. These have no content link to any document a model was "
+          "trained or tested on.", "",
+          "| model | lowest false alarm | "
+          + " | ".join(f"alarm <= {l}" for l in ALARM_LEVELS) + " |",
+          "|---|---|" + "---|" * len(ALARM_LEVELS)]
+    for name, r in out.items():
+        lo = min(x["false_alarm"] for x in r["unrelated_human_curve"])
+        cells = []
+        for lvl in ALARM_LEVELS:
+            m = r["matched_unrelated_false_alarm"][str(lvl)]
+            cells.append(f"{m['mixed_bE']:.3f} (thr {m['threshold']:.2f})"
+                         if m else "unreachable")
+        L.append(f"| {name} | {lo:.3f} | " + " | ".join(cells) + " |")
     L.append("")
     path.write_text("\n".join(L), encoding="utf-8")
 

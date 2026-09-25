@@ -50,6 +50,10 @@ METRICS = [
      ("test_unrelated_human", "threshold", "doc_false_alarm"), False),
     ("boundaries per unrelated human doc",
      ("test_unrelated_human", "threshold", "boundaries_per_doc"), False),
+    ("twin false-alarm rate (Viterbi)",
+     ("test_twins", "viterbi", "overall", "doc_false_alarm"), False),
+    ("unrelated-human false-alarm rate (Viterbi)",
+     ("test_unrelated_human", "viterbi", "doc_false_alarm"), False),
 ]
 
 
@@ -96,9 +100,10 @@ def main() -> None:
     n = {len(v[0]) for v in groups.values()}
 
     L = ["# Results across seeds", "",
-         "Test set. Mean ± sample standard deviation across seeds. Twin "
-         "metrics use threshold decoding; mixed-only metrics are labelled by "
-         "decoder.", ""]
+         "Test set. Mean ± sample standard deviation across seeds. Metrics "
+         "on human documents (twins, unrelated human documents) use "
+         "threshold decoding unless labelled Viterbi; mixed-only metrics are "
+         "labelled by decoder.", ""]
     for name in names:
         runs, rows = groups[name]
         L.append(f"- **{name}**: " + ", ".join(
