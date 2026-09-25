@@ -12,3 +12,6 @@ logs/
 cache/
 .pipwork/
 models/
+
+# Third-party English replication data (see docs/english-replication.md)
+data/

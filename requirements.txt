@@ -12,3 +12,5 @@ scikit-learn==1.7.2
 torch>=2.6
 transformers==5.16.1
 Flask==3.1.2
+sentencepiece==0.2.2   # DeBERTa-v3 tokenizer (English replication)
+protobuf==7.36.2   # needed to convert the DeBERTa-v3 SentencePiece model
