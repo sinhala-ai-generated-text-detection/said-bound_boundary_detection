@@ -163,7 +163,7 @@ def main() -> None:
                     help="smoke test: keep only the first N docs per split")
     ap.add_argument("--tag", help="name for this run; sets --save-to, "
                     "--json-out and --out to models/xlmr_<tag> and "
-                    "reports/detection/<tag>.{json,md}")
+                    "results/detection/twins/<tag>.{json,md}")
     ap.add_argument("--no-fp16", action="store_true")
     ap.add_argument("--cpu", action="store_true")
     ap.add_argument("--save-to")
@@ -174,11 +174,11 @@ def main() -> None:
         a.tag = "eval"          # never overwrite the trained run's results
     if a.tag:
         a.save_to = a.save_to or f"models/xlmr_{a.tag}"
-        a.json_out = a.json_out or f"reports/detection/{a.tag}.json"
-        a.out = a.out or f"reports/detection/{a.tag}.md"
+        a.json_out = a.json_out or f"results/detection/twins/{a.tag}.json"
+        a.out = a.out or f"results/detection/twins/{a.tag}.md"
     a.save_to = None if a.eval_only else (a.save_to or "models/xlmr_tagger")
-    a.json_out = a.json_out or "reports/detection/xlmr.json"
-    a.out = a.out or "reports/detection/xlmr.md"
+    a.json_out = a.json_out or "results/detection/xlmr/xlmr.json"
+    a.out = a.out or "results/detection/xlmr/xlmr.md"
 
     import torch
     from transformer import TransformerDetector
@@ -415,7 +415,7 @@ def main() -> None:
 
 
 def write_report(path: Path, p: dict) -> None:
-    lin_path = Path("reports/detection/linear.json")
+    lin_path = Path("results/detection/baselines/linear.json")
     lin = json.loads(lin_path.read_text(encoding="utf-8")) if lin_path.exists() else None
 
     def row(label, m):

@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from segment import word_count  # noqa: E402
 from utils import force_utf8_stdout, load_config, read_jsonl, write_jsonl  # noqa: E402
 

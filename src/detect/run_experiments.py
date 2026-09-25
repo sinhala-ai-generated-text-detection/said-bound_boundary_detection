@@ -1,4 +1,4 @@
-"""Train and evaluate boundary detectors, and write reports/detection/linear.md.
+"""Train and evaluate boundary detectors, and write results/detection/baselines/linear.md.
 
 Protocol, and why it is shaped this way:
 
@@ -65,8 +65,8 @@ def main() -> None:
     force_utf8_stdout()
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.yaml")
-    ap.add_argument("--out", default="reports/detection/linear.md")
-    ap.add_argument("--json-out", default="reports/detection/linear.json")
+    ap.add_argument("--out", default="results/detection/baselines/linear.md")
+    ap.add_argument("--json-out", default="results/detection/baselines/linear.json")
     a = ap.parse_args()
 
     cfg = load_config(a.config)

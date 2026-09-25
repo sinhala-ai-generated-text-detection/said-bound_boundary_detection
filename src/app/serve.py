@@ -7,8 +7,8 @@ sentence human or machine.
 Runs locally because the model is a 1.1 GB PyTorch checkpoint: it cannot run in
 a browser, and the text you paste never leaves your machine.
 
-    python src/serve.py                 # then open http://127.0.0.1:5000
-    python src/serve.py --port 8000 --cpu
+    python src/app/serve.py                 # then open http://127.0.0.1:5000
+    python src/app/serve.py --port 8000 --cpu
 """
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent / "detect"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "detect"))
 
 from flask import Flask, jsonify, request  # noqa: E402
 
@@ -29,7 +29,7 @@ app = Flask(__name__)
 STATE: dict = {}
 
 MODEL_DIR = Path("models/xlmr_tagger")
-RESULTS = Path("reports/detection/xlmr.json")
+RESULTS = Path("results/detection/xlmr/xlmr.json")
 
 
 # ------------------------------------------------------------------ model ---

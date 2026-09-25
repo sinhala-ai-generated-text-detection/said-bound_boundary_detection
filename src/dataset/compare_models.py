@@ -5,14 +5,14 @@ the SAME span plan, so differences in the output are attributable to the model
 and nothing else. The pilot cannot answer this on its own: it assigns different
 windows to each generator, and the held-out generator only sees dev/test.
 
-Writes reports/generation/model_comparison.md:
+Writes results/generation/model_comparison.md:
   - an at-a-glance table, one row per example, one column per model
   - a per-example table putting the human original beside every model's text
 
-Results are cached in reports/generation/evidence/model_comparison.jsonl, so re-running to
+Results are cached in results/generation/evidence/model_comparison.jsonl, so re-running to
 re-render the markdown costs nothing.
 
-    python src/compare_models.py --per-type 3
+    python src/dataset/compare_models.py --per-type 3
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from generate import (  # noqa: E402
     ALL_TYPES,
     Generator,
@@ -37,7 +38,7 @@ from utils import (  # noqa: E402
     write_jsonl,
 )
 
-CACHE = "reports/generation/evidence/model_comparison.jsonl"
+CACHE = "results/generation/evidence/model_comparison.jsonl"
 
 
 def human_counterpart(window: dict, plan: dict) -> list[str]:
@@ -336,7 +337,7 @@ def main() -> None:
     else:
         rows = collect(cfg, a.per_type, gens)
 
-    out = Path(cfg["paths"]["reports_dir"]) / "generation" / "model_comparison.md"
+    out = Path(cfg["paths"]["results_dir"]) / "generation" / "model_comparison.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(cfg, rows, gens), encoding="utf-8")
     print(f"wrote -> {out}")

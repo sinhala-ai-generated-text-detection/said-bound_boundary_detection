@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils import force_utf8_stdout, load_config, read_jsonl  # noqa: E402
 
 SPLITS = ("train", "dev", "test")
@@ -43,7 +44,7 @@ def load_split_map(cfg: dict) -> dict[str, str]:
         p = d / f"{name}_source_ids.txt"
         if not p.exists():
             raise FileNotFoundError(
-                f"{p} missing - run `python src/split.py` before generating.")
+                f"{p} missing - run `python src/dataset/split.py` before generating.")
         for line in p.read_text(encoding="utf-8").splitlines():
             sid = line.strip()
             if sid:

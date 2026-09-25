@@ -135,10 +135,10 @@ def main() -> None:
                   + (f"{r['mixed_bE']:.3f} (thr {r['threshold']:.3f}, "
                      f"alarm {r['false_alarm']:.3f})" if r else "unreachable"))
 
-    Path("reports/detection/twin_tradeoff.json").write_text(
+    Path("results/detection/twins/twin_tradeoff.json").write_text(
         json.dumps(out, indent=2), encoding="utf-8")
-    write_report(Path("reports/detection/twin_tradeoff.md"), out)
-    print("\nwrote -> reports/detection/twin_tradeoff.{md,json}")
+    write_report(Path("results/detection/twins/twin_tradeoff.md"), out)
+    print("\nwrote -> results/detection/twins/twin_tradeoff.{md,json}")
 
 
 def write_report(path: Path, out: dict) -> None:

@@ -18,6 +18,7 @@ matplotlib.use("Agg")          # headless: write files, never open a window
 import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils import force_utf8_stdout, load_config, read_jsonl  # noqa: E402
 
 
@@ -32,7 +33,7 @@ def _hist(ax, values, title, xlabel, bins=20, color="#4C72B0"):
 def run(cfg: dict) -> dict:
     force_utf8_stdout()
     gdir = Path(cfg["paths"]["generated_dir"])
-    rdir = Path(cfg["paths"]["reports_dir"]) / "dataset"
+    rdir = Path(cfg["paths"]["results_dir"]) / "dataset"
     rdir.mkdir(parents=True, exist_ok=True)
 
     records = list(read_jsonl(gdir / "combined.jsonl"))

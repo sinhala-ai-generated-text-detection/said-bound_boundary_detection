@@ -1,10 +1,7 @@
 """Unit tests for wikitext stripping and page-type filtering."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from clean import (  # noqa: E402
     PageFilter,
     drop_short_paragraphs,

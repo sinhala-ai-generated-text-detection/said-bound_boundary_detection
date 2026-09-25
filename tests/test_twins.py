@@ -1,13 +1,10 @@
 """Counterfactual twins: construction, pairing and the paired loss."""
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "src" / "detect"))
 
 torch = pytest.importorskip("torch")
 from data import Doc, load_twins  # noqa: E402

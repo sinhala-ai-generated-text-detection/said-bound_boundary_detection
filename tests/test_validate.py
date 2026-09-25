@@ -1,10 +1,7 @@
 """Unit tests for the 7 validation checks."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from utils import load_config  # noqa: E402
 from validate import Validator, clean_output  # noqa: E402
 

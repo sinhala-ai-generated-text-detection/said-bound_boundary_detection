@@ -9,8 +9,6 @@ wikipedia.parquet
 sources/
 generated/
 logs/
-reports/**/*.png
-reports/figures/
 cache/
 .pipwork/
 models/

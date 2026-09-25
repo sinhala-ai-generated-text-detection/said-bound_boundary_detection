@@ -19,6 +19,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from segment import segment_sentences, sinhala_ratio, word_count  # noqa: E402
 from utils import force_utf8_stdout, load_config, write_jsonl  # noqa: E402
 

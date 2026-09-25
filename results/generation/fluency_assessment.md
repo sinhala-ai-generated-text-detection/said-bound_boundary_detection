@@ -64,8 +64,8 @@ boundary detector on them would teach it to spot degenerate text, not an
 authorial change.
 
 Those 7 records have been removed from the dataset and archived to
-`reports/evidence/mistral_nemo_pilot_records.jsonl`, with the 128 rejections in
-`reports/evidence/mistral_nemo_rejections.jsonl`.
+`results/generation/evidence/mistral_nemo_pilot_records.jsonl`, with the 128 rejections in
+`results/generation/evidence/mistral_nemo_rejections.jsonl`.
 
 **Verdict: dropped. Replaced by GPT-4o (`openai/gpt-4o-2024-11-20`), which was
 probed on the same prompts and passes both the automatic checks and reading.**

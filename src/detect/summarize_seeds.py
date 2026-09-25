@@ -1,6 +1,6 @@
 """Mean and spread across seeds, and paired differences between two methods.
 
-Reads the result JSON that run_transformer.py writes to reports/detection/.
+Reads the result JSON that run_transformer.py writes to results/detection/twins/.
 Each group lists its runs in seed order; when two groups are given, runs are
 paired position by position (same seed), and the paired difference is the
 headline: seed-to-seed noise that both methods share cancels out.
@@ -8,7 +8,7 @@ headline: seed-to-seed noise that both methods share cancels out.
     python src/detect/summarize_seeds.py \\
         twin_ft=twin_ft,twin_ft_s43,twin_ft_s44 \\
         control=xlmr_ft,xlmr_ft_s43,xlmr_ft_s44 \\
-        --out reports/detection/twin_ft_seeds
+        --out results/detection/twins/twin_ft_seeds
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils import load_config  # noqa: E402
 
-RESULTS = Path("reports/detection")
+RESULTS = Path("results/detection/twins")
 
 # (label, path into the results JSON, higher is better)
 METRICS = [

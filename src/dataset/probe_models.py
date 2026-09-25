@@ -5,7 +5,7 @@ fluency gate. Runs the actual Type-1 and span-replacement prompts against
 arbitrary OpenRouter slugs and reports validator outcomes plus the raw text,
 so the Sinhala can be read and judged rather than guessed at.
 
-    python src/probe_models.py --models google/gemma-3-27b-it qwen/qwen3-32b
+    python src/dataset/probe_models.py --models google/gemma-3-27b-it qwen/qwen3-32b
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from generate import TYPE1, TYPE2, load_prompts, plan_type1, plan_type2  # noqa: E402
 from openrouter import OpenRouterClient  # noqa: E402
 from segment import word_count  # noqa: E402

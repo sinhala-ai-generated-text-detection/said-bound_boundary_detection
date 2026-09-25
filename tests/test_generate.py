@@ -7,10 +7,7 @@ describe the assembled text exactly.
 from __future__ import annotations
 
 import random
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from generate import (  # noqa: E402
     TYPE1,
     TYPE2,

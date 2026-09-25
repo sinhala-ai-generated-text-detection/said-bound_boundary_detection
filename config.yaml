@@ -11,7 +11,7 @@ paths:
   generated_dir: generated
   logs_dir: logs
   splits_dir: splits
-  reports_dir: reports
+  results_dir: results
   prompts: prompts/task2_prompts.yaml
 
 # --- Column mapping (discovered by inspect_data.py; adapt here, not in code) --
@@ -153,7 +153,7 @@ generators:
     reasoning: null
   # Replaced mistralai/mistral-nemo after the pilot: its Sinhala was
   # degenerate word-salad that also leaked prompt instructions into the output
-  # text. See reports/generation/.
+  # text. See results/generation/.
   gpt_4o:
     slug: openai/gpt-4o-2024-11-20     # dated slug pinned for reproducibility
     role: seen

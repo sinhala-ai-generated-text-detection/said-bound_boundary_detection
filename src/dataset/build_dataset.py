@@ -19,6 +19,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from generate import OUT_FILES  # noqa: E402
 from split import load_split_map  # noqa: E402
 from utils import force_utf8_stdout, load_config, read_jsonl, write_jsonl  # noqa: E402

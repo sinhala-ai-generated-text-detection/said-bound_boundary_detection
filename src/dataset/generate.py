@@ -29,6 +29,7 @@ from typing import Any, Callable
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from openrouter import (  # noqa: E402
     InsufficientCredits,
     MissingAPIKey,

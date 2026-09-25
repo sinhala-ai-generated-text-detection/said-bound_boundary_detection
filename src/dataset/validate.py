@@ -24,6 +24,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from segment import latin_ratio, segment_sentences, sinhala_ratio, word_count  # noqa: E402
 
 # Wrapping the model sometimes adds around an otherwise-fine answer.
