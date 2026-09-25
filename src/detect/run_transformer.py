@@ -14,8 +14,24 @@ Two decoders are compared, and both are tuned on dev-seen only:
   then reporting boundary F1 optimises the wrong objective, which is the main
   thing this runner fixes.
 
+Every run is also scored on the all-human *twin* of each test document (see
+data.load_twins): how often the detector invents machine text in a document
+that has none, and whether it separates each AI span from the human text it
+replaced.
+
     python src/detect/run_transformer.py --epochs 12 --lr 3e-5 --grad-accum 1
     python src/detect/run_transformer.py --no-pair-head    # ablation
+
+Counterfactual twin training, and its "plain extra negatives" ablation:
+
+    python src/detect/run_transformer.py --epochs 8 --twins --tag twin
+    python src/detect/run_transformer.py --epochs 8 --twins --tag twin_plain \\
+        --margin-weight 0 --consistency-weight 0
+
+Re-score a saved model without training (threshold and bias re-tuned on
+dev-seen exactly as after training):
+
+    python src/detect/run_transformer.py --eval-only models/xlmr_tagger --tag xlmr_rescored
 """
 from __future__ import annotations
 
@@ -30,8 +46,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from data import load_dataset, describe, role_map  # noqa: E402
-from metrics import boundary_metrics, evaluate, sentence_metrics  # noqa: E402
+from data import load_dataset, load_twins, describe, role_map  # noqa: E402
+from metrics import (boundary_metrics, evaluate, sentence_metrics,  # noqa: E402
+                     twin_metrics)
 from utils import force_utf8_stdout, load_config  # noqa: E402
 
 
@@ -63,6 +80,39 @@ def _bound_f1(docs, pred) -> float:
     return boundary_metrics(gold, per_doc, 0).f1
 
 
+def _per_doc(docs, flat, cast=int) -> list[list]:
+    out, i = [], 0
+    for d in docs:
+        out.append([cast(v) for v in flat[i:i + d.n]])
+        i += d.n
+    return out
+
+
+def eval_twins(model, docs, twins, rm, threshold: float, bias: float) -> dict:
+    """Twin metrics for both decoders, overall and per generator role."""
+    pm, pt = model.predict_proba(docs), model.predict_proba(twins)
+    preds = {
+        "threshold": ((pm >= threshold).astype(int),
+                      (pt >= threshold).astype(int)),
+        "viterbi": (model.predict_viterbi(docs, boundary_bias=bias),
+                    model.predict_viterbi(twins, boundary_bias=bias)),
+    }
+    Pm, Pt = _per_doc(docs, pm, float), _per_doc(twins, pt, float)
+    out = {}
+    for dec, (ym, yt) in preds.items():
+        Ym, Yt = _per_doc(docs, ym), _per_doc(twins, yt)
+        out[dec] = {}
+        for sl, roles in (("overall", None), ("seen", {"seen"}),
+                          ("held_out", {"held_out"})):
+            keep = [i for i, d in enumerate(docs)
+                    if roles is None or rm.get(d.generator) in roles]
+            out[dec][sl] = twin_metrics(
+                [docs[i] for i in keep], [twins[i] for i in keep],
+                [Ym[i] for i in keep], [Yt[i] for i in keep],
+                [Pm[i] for i in keep], [Pt[i] for i in keep])
+    return out
+
+
 def main() -> None:
     force_utf8_stdout()
     ap = argparse.ArgumentParser()
@@ -83,12 +133,41 @@ def main() -> None:
     ap.add_argument("--likelihood", action="store_true",
                     help="concatenate cached masked-LM likelihood features to "
                          "each sentence representation (see likelihood.py)")
+    ap.add_argument("--twins", action="store_true",
+                    help="counterfactual twin training: pair each training "
+                         "document with its all-human source window")
+    ap.add_argument("--margin-weight", type=float, default=1.0,
+                    help="weight of the paired margin term (twins only)")
+    ap.add_argument("--consistency-weight", type=float, default=1.0,
+                    help="weight of the context-consistency term (twins only)")
+    ap.add_argument("--twin-margin", type=float, default=2.0,
+                    help="required logit gap between an AI span and the "
+                         "human sentence it replaced")
+    ap.add_argument("--twin-warmup", type=float, default=0.0,
+                    help="epochs of tagging loss only before the paired "
+                         "terms ramp in (over one further epoch)")
+    ap.add_argument("--eval-only", metavar="MODEL_DIR",
+                    help="skip training; score a saved sentence-head model")
+    ap.add_argument("--limit", type=int, default=0,
+                    help="smoke test: keep only the first N docs per split")
+    ap.add_argument("--tag", help="name for this run; sets --save-to, "
+                    "--json-out and --out to models/xlmr_<tag> and "
+                    "reports/detection/<tag>.{json,md}")
     ap.add_argument("--no-fp16", action="store_true")
     ap.add_argument("--cpu", action="store_true")
-    ap.add_argument("--save-to", default="models/xlmr_tagger")
-    ap.add_argument("--json-out", default="reports/detection/xlmr.json")
-    ap.add_argument("--out", default="reports/detection/xlmr.md")
+    ap.add_argument("--save-to")
+    ap.add_argument("--json-out")
+    ap.add_argument("--out")
     a = ap.parse_args()
+    if a.eval_only and not a.tag:
+        a.tag = "eval"          # never overwrite the trained run's results
+    if a.tag:
+        a.save_to = a.save_to or f"models/xlmr_{a.tag}"
+        a.json_out = a.json_out or f"reports/detection/{a.tag}.json"
+        a.out = a.out or f"reports/detection/{a.tag}.md"
+    a.save_to = None if a.eval_only else (a.save_to or "models/xlmr_tagger")
+    a.json_out = a.json_out or "reports/detection/xlmr.json"
+    a.out = a.out or "reports/detection/xlmr.md"
 
     import torch
     from transformer import TransformerDetector
@@ -106,6 +185,10 @@ def main() -> None:
     train = ds.filter(split="train")
     dev = ds.filter(split="dev")
     test = ds.filter(split="test")
+    if a.limit:
+        # Keep both generator roles in the smoke-test test set.
+        train, dev = (type(ds)(x.docs[:a.limit]) for x in (train, dev))
+        test = type(ds)(test.docs[:a.limit // 2] + test.docs[-(a.limit // 2):])
     dev_seen = dev.filter(roles=["seen"], role_map=rm)
     describe(train, cfg, "train")
     describe(dev_seen, cfg, "dev (seen only)")
@@ -141,7 +224,10 @@ def main() -> None:
         max_length=a.max_length, fp16=not a.no_fp16,
         class_weight=[w_h, w_ai], seed=cfg["seed"],
         use_pair_head=use_pair, pair_loss_weight=a.pair_loss_weight,
-        pair_pos_weight=a.pair_pos_weight, feat_map=feat_map)
+        pair_pos_weight=a.pair_pos_weight, feat_map=feat_map,
+        margin_weight=a.margin_weight,
+        consistency_weight=a.consistency_weight, twin_margin=a.twin_margin,
+        twin_warmup_epochs=a.twin_warmup)
     if a.cpu:
         det.device = torch.device("cpu")
         det.fp16 = False
@@ -180,10 +266,25 @@ def main() -> None:
         """
         return best_bias_on(dev_seen.docs)[1]
 
-    print(f"\nfine-tuning {a.model} "
-          f"({'pair head + viterbi' if use_pair else 'sentence head only'}) ...")
+    tr_twins = tr_weights = None
+    if a.twins:
+        tr_twins, tr_weights = load_twins(train.docs, cfg)
+        print(f"\ntwins: {len(tr_twins)} pairs over "
+              f"{len({t.window_id for t in tr_twins})} windows; "
+              f"margin weight {a.margin_weight}, consistency weight "
+              f"{a.consistency_weight}, margin {a.twin_margin}, "
+              f"warm-up {a.twin_warmup} epochs")
+
     t0 = time.time()
-    det.fit(train.docs, dev_docs=dev_seen.docs, eval_fn=dev_probe)
+    if a.eval_only:
+        print(f"\nloading {a.eval_only} (no training) ...")
+        det.load(a.eval_only)
+    else:
+        print(f"\nfine-tuning {a.model} "
+              f"({'pair head + viterbi' if use_pair else 'sentence head only'}"
+              f"{', counterfactual twins' if a.twins else ''}) ...")
+        det.fit(train.docs, dev_docs=dev_seen.docs, eval_fn=dev_probe,
+                twins=tr_twins, twin_weights=tr_weights)
     train_secs = time.time() - t0
     print(f"training took {train_secs / 60:.1f} min")
 
@@ -255,8 +356,26 @@ def main() -> None:
         print(f"  {t:36s} F1={per_type[t]['sentence']['f1_ai']:.3f} "
               f"bE={per_type[t]['boundary_exact']['f1']:.3f}")
 
+    test_twins, _ = load_twins(test.docs, cfg)
+    twins_res = eval_twins(det, test.docs, test_twins, rm, best_t, best_b)
+    print("\n=== TEST: all-human twins ===")
+    for dec, by_slice in twins_res.items():
+        for k, m in by_slice.items():
+            print(f"  {dec:9s} {k:9s} false-alarm={m['doc_false_alarm']:.3f} "
+                  f"bnd/twin={m['boundaries_per_twin']:.2f} "
+                  f"sentFPR={m['sentence_fpr']:.3f} "
+                  f"win={m['paired_win_rate']:.3f} "
+                  f"flip={m['paired_flip_rate']:.3f} "
+                  f"ctx={m['context_stability']:.3f} "
+                  f"bE+twins={m['combined_boundary_exact']['f1']:.3f}")
+
     payload = {
         "model": a.model, "epochs": a.epochs, "lr": a.lr,
+        "eval_only": a.eval_only,
+        "twins": {"enabled": a.twins, "margin_weight": a.margin_weight,
+                  "consistency_weight": a.consistency_weight,
+                  "margin": a.twin_margin, "warmup_epochs": a.twin_warmup},
+        "test_twins": twins_res,
         "batch_size": a.batch_size, "grad_accum": a.grad_accum,
         "use_pair_head": use_pair,
         "likelihood_features": bool(feat_map),
@@ -354,6 +473,40 @@ def write_report(path: Path, p: dict) -> None:
         L.append(DIV)
         L.append(row("threshold (per-sentence)", p["test_threshold"]["overall"]))
         L.append(row("**viterbi (pair head)**", p["test_viterbi"]["overall"]))
+        L.append("")
+
+    if p.get("test_twins"):
+        tw = p["twins"]
+        L.append("## All-human twins")
+        L.append("")
+        L.append("Each test document is also scored as its all-human source "
+                 "window: same topic, length and positions, no machine text. "
+                 "*False alarm* is the share of twins with any sentence "
+                 "flagged; *win* is how often an AI sentence scores above the "
+                 "human sentence it replaced; *flip* is how often it is "
+                 "flagged while that human sentence is not; *ctx stable* is "
+                 "how often an untouched human sentence gets the same label "
+                 "in both documents; *bE + twins* is exact-boundary F1 over "
+                 "the mixed documents and the twins together.")
+        L.append("")
+        if tw["enabled"]:
+            L.append(f"Trained with counterfactual twins: margin weight "
+                     f"{tw['margin_weight']}, consistency weight "
+                     f"{tw['consistency_weight']}, margin {tw['margin']}.")
+            L.append("")
+        L.append("| decoder | slice | twins | false alarm | boundaries/twin | "
+                 "sentence FPR | win | flip | ctx stable | bE + twins |")
+        L.append("|---|---|---|---|---|---|---|---|---|---|")
+        for dec, by_slice in p["test_twins"].items():
+            for k, m in by_slice.items():
+                L.append(f"| {dec} | {k} | {m['n_twins']} | "
+                         f"{m['doc_false_alarm']:.3f} | "
+                         f"{m['boundaries_per_twin']:.2f} | "
+                         f"{m['sentence_fpr']:.3f} | "
+                         f"{m['paired_win_rate']:.3f} | "
+                         f"{m['paired_flip_rate']:.3f} | "
+                         f"{m['context_stability']:.3f} | "
+                         f"{m['combined_boundary_exact']['f1']:.3f} |")
         L.append("")
 
     if lin:

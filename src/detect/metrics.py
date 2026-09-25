@@ -133,6 +133,61 @@ def evaluate(docs, flat_true, flat_pred, doc_index,
     }
 
 
+def twin_metrics(docs, twins, pred_mixed, pred_twin,
+                 proba_mixed, proba_twin) -> dict:
+    """How a detector behaves on the all-human twin of each test document.
+
+    Every training document contains at least one boundary, so a tagger can
+    learn "there is always machine text somewhere" and flag the most
+    machine-like human sentence of a pure-human document. Mixed-document
+    metrics cannot see this. Arguments are per-document lists aligned with
+    `docs` / `twins` (labels and P(AI)).
+
+    Twin-only rates count each window once, because several test records can
+    share a window. Paired rates use every (mixed, twin) pair, since each pair
+    replaces a different span.
+    """
+    seen: set[str] = set()
+    uniq = []
+    for t, p in zip(twins, pred_twin):
+        if t.window_id not in seen:
+            seen.add(t.window_id)
+            uniq.append((t, p))
+    n_sent = sum(len(p) for _, p in uniq)
+    fp_sent = sum(sum(p) for _, p in uniq)
+    alarms = sum(1 for _, p in uniq if any(p))
+    halluc = sum(len(boundaries_from_labels(p)) for _, p in uniq)
+
+    wins = flips = n_ai = stable = n_ctx = 0
+    for d, pm, pt, qm, qt in zip(docs, pred_mixed, pred_twin,
+                                 proba_mixed, proba_twin):
+        for i, y in enumerate(d.labels):
+            if y == 1:
+                n_ai += 1
+                wins += qm[i] > qt[i]
+                flips += pm[i] == 1 and pt[i] == 0
+            else:
+                n_ctx += 1
+                stable += pm[i] == pt[i]
+
+    # Deployment view: the mixed documents plus one pure-human document per
+    # window, scored together. Boundaries predicted on a twin are all false
+    # positives, which mixed-only exact-boundary F1 never charges for.
+    combined = boundary_metrics(
+        [list(d.labels) for d in docs] + [list(t.labels) for t, _ in uniq],
+        [list(p) for p in pred_mixed] + [list(p) for _, p in uniq], 0)
+    return {
+        "n_twins": len(uniq),
+        "doc_false_alarm": alarms / max(1, len(uniq)),
+        "boundaries_per_twin": halluc / max(1, len(uniq)),
+        "sentence_fpr": fp_sent / max(1, n_sent),
+        "paired_win_rate": wins / max(1, n_ai),
+        "paired_flip_rate": flips / max(1, n_ai),
+        "context_stability": stable / max(1, n_ctx),
+        "combined_boundary_exact": combined.as_dict(),
+    }
+
+
 def fmt_row(name: str, m: dict) -> str:
     s, b0, bt = m["sentence"], m["boundary_exact"], m["boundary_tol"]
     return (f"| {name} | {s['accuracy']:.3f} | {s['f1_ai']:.3f} | "

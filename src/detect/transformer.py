@@ -138,6 +138,103 @@ def collate(batch, pad_id: int):
     return input_ids, attn, marker, marker_mask, labels, meta, extra
 
 
+class TwinPairDataset(TorchDataset):
+    """Each item is a mixed document together with its all-human twin.
+
+    The two are encoded separately (a twin sentence can tokenize to a different
+    length than the AI sentence it stands in for, so long documents may chunk
+    differently) and matched up again per sentence in `collate_pairs`.
+    """
+
+    def __init__(self, docs, twins, weights, tokenizer, max_length: int = 512):
+        def by_doc(ds, n):
+            out = [[] for _ in range(n)]
+            for item in ds.items:
+                out[item[2]].append(item)
+            return out
+        self.mixed = by_doc(SentenceTaggingDataset(docs, tokenizer, max_length),
+                            len(docs))
+        self.twin = by_doc(SentenceTaggingDataset(twins, tokenizer, max_length),
+                           len(twins))
+        self.labels = [list(d.labels) for d in docs]
+        self.weights = list(weights)
+
+    def __len__(self) -> int:
+        return len(self.labels)
+
+    def __getitem__(self, i):
+        return self.mixed[i], self.twin[i], self.labels[i], self.weights[i]
+
+
+def collate_pairs(batch, pad_id: int):
+    """Stack every chunk of every pair into one encoder batch.
+
+    Besides the usual tensors, returns for each sentence of each pair the flat
+    index of its marker in the mixed document (`gm`) and in the twin (`gt`),
+    so the loss can compare the two predictions for the same position.
+    """
+    chunks, owner = [], []
+    for b, (cm, ct, _, _) in enumerate(batch):
+        chunks += cm
+        owner += [(b, 0)] * len(cm)
+        chunks += ct
+        owner += [(b, 1)] * len(ct)
+    ids, attn, marker, marker_mask, _, meta, _ = collate(chunks, pad_id)
+    width = marker.size(1)
+    flat = {}
+    for r, ((b, side), (_, sidx)) in enumerate(zip(owner, meta)):
+        for j, si in enumerate(sidx):
+            flat[(b, side, si)] = r * width + j
+    gm, gt, y, tw = [], [], [], []
+    for b, (_, _, labels, w) in enumerate(batch):
+        for si, lab in enumerate(labels):
+            gm.append(flat[(b, 0, si)])
+            gt.append(flat[(b, 1, si)])
+            y.append(lab)
+            tw.append(w)
+    return (ids, attn, marker, marker_mask, torch.tensor(gm),
+            torch.tensor(gt), torch.tensor(y), torch.tensor(tw))
+
+
+def twin_loss(logits, gm, gt, y, tw, class_weight=None, margin: float = 2.0):
+    """Tagging loss on both documents, plus the two paired terms.
+
+    * ``ce``: cross-entropy over the mixed sentences and the twin's sentences
+      (all human), each twin down-weighted by how many records share its
+      window. With no twins this is exactly the baseline objective.
+    * ``margin``: at every replaced position the AI sentence must out-score
+      the human sentence it replaced by ``margin`` in logit space. Position and
+      topic are identical across the pair, so neither can satisfy this term;
+      only authorship can.
+    * ``consistency``: symmetric KL between the predictions for each untouched
+      human sentence in the mixed document and in the twin. Its authorship does
+      not change, so its prediction should not depend on whether machine text
+      appears elsewhere. This is what targets the "every document has a
+      boundary" prior.
+    """
+    flat = logits.reshape(-1, 2).float()
+    lm, lt = flat[gm], flat[gt]
+    tgt = torch.cat([y, torch.zeros_like(y)])
+    w = torch.cat([torch.ones_like(tw), tw])
+    if class_weight is not None:
+        w = w * class_weight[tgt]
+    ce_each = nn.functional.cross_entropy(torch.cat([lm, lt]), tgt,
+                                          reduction="none")
+    ce = (ce_each * w).sum() / w.sum()
+
+    ai = y == 1
+    zero = flat.new_zeros(())
+    diff = (lm[:, 1] - lm[:, 0]) - (lt[:, 1] - lt[:, 0])
+    mrg = torch.relu(margin - diff[ai]).mean() if ai.any() else zero
+    if (~ai).any():
+        pm = torch.log_softmax(lm[~ai], -1)
+        pt = torch.log_softmax(lt[~ai], -1)
+        cons = 0.5 * ((pm.exp() - pt.exp()) * (pm - pt)).sum(-1).mean()
+    else:
+        cons = zero
+    return ce, mrg, cons
+
+
 class SentenceTagger(nn.Module):
     """Sentence labels, plus an optional head that scores adjacent pairs.
 
@@ -239,8 +336,22 @@ class TransformerDetector:
                  batch_size=4, grad_accum=4, lr=2e-5, epochs=4,
                  warmup_ratio=0.1, seed=42, fp16=True, class_weight=None,
                  max_grad_norm=1.0, verbose=True, use_pair_head=True,
-                 pair_loss_weight=1.0, pair_pos_weight=2.0, feat_map=None):
+                 pair_loss_weight=1.0, pair_pos_weight=2.0, feat_map=None,
+                 margin_weight=1.0, consistency_weight=1.0, twin_margin=2.0,
+                 twin_warmup_epochs=0.0):
         self.model_name = model_name
+        # Counterfactual twin training (see twin_loss). Only active when fit()
+        # is given twins; the weights at 0 give the "twins as plain extra
+        # negatives" ablation.
+        self.margin_weight = margin_weight
+        self.consistency_weight = consistency_weight
+        self.twin_margin = twin_margin
+        # The paired terms are off for this many epochs, then ramp in linearly
+        # over one more. Switched on from step 0 they trapped the model in a
+        # constant output: an encoder that cannot yet tell the pair apart gets
+        # no usable margin gradient, while the consistency term rewards
+        # ignoring the input, which is exactly the collapsed solution.
+        self.twin_warmup_epochs = twin_warmup_epochs
         self.max_length = max_length
         self.batch_size = batch_size
         self.grad_accum = grad_accum
@@ -313,17 +424,49 @@ class TransformerDetector:
         return DataLoader(ds, batch_size=self.batch_size, shuffle=shuffle,
                           collate_fn=lambda b: collate(b, pad))
 
-    def fit(self, docs, dev_docs=None, eval_fn=None):
+    def _twin_loader(self, docs, twins, weights):
+        # Half as many pairs per batch as documents in the baseline, so the
+        # encoder sees the same number of documents per step and the same
+        # memory budget holds.
+        ds = TwinPairDataset(docs, twins, weights, self.tokenizer,
+                             self.max_length)
+        pad = self.tokenizer.pad_token_id
+        return DataLoader(ds, batch_size=max(1, self.batch_size // 2),
+                          shuffle=True,
+                          collate_fn=lambda b: collate_pairs(b, pad))
+
+    def load(self, path):
+        """Restore a saved tagger for evaluation without retraining."""
+        path = Path(path)
+        self.tokenizer = AutoTokenizer.from_pretrained(str(path))
+        self.model = SentenceTagger(self.model_name,
+                                    use_pair_head=self.use_pair_head,
+                                    extra_dim=self.feat_dim)
+        state = torch.load(path / "model.pt", map_location="cpu")
+        self.model.load_state_dict(state)
+        self.model.to(self.device).eval()
+        return self
+
+    def fit(self, docs, dev_docs=None, eval_fn=None, twins=None,
+            twin_weights=None):
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         if self.feat_dim:
             self._fit_scaler(docs)
+        paired = twins is not None
+        if paired and (self.feat_dim or self.use_pair_head):
+            raise ValueError("twin training supports the sentence head only, "
+                             "without likelihood features")
         self.model = SentenceTagger(
             self.model_name, use_pair_head=self.use_pair_head,
             extra_dim=self.feat_dim).to(self.device)
 
-        loader = self._loader(docs, shuffle=True)
+        if paired:
+            loader = self._twin_loader(docs, twins,
+                                       twin_weights or [1.0] * len(docs))
+        else:
+            loader = self._loader(docs, shuffle=True)
         steps = max(1, len(loader) // self.grad_accum) * self.epochs
         opt = torch.optim.AdamW(self.model.parameters(), lr=self.lr,
                                 weight_decay=0.01)
@@ -340,29 +483,47 @@ class TransformerDetector:
             pos_weight=torch.tensor(self.pair_pos_weight, device=self.device))
 
         if self.verbose:
-            print(f"  device={self.device} chunks={len(loader.dataset)} "
+            unit = "pairs" if paired else "chunks"
+            print(f"  device={self.device} {unit}={len(loader.dataset)} "
                   f"steps={steps}")
         self.model.train()
         for ep in range(self.epochs):
             tot, nb = 0.0, 0
+            parts = np.zeros(3)
             opt.zero_grad(set_to_none=True)
-            for i, (ids, attn, mk, mkm, lab, _, ex) in enumerate(loader):
-                ids, attn = ids.to(self.device), attn.to(self.device)
-                mk, lab = mk.to(self.device), lab.to(self.device)
-                ex = ex.to(self.device) if ex is not None else None
-                with torch.amp.autocast("cuda", enabled=self.fp16 and
-                                        self.device.type == "cuda"):
-                    logits, pair_logit = self.model(ids, attn, mk, mkm, ex)
-                    loss = lossf(logits.reshape(-1, 2), lab.reshape(-1))
-                    if pair_logit is not None and self.pair_loss_weight > 0:
-                        # Boundary target for pair (i-1, i): did the label
-                        # change. Masked to pairs where both labels are real.
-                        left, right = lab[:, :-1], lab[:, 1:]
-                        valid = (left >= 0) & (right >= 0)
-                        if valid.any():
-                            tgt = (left != right).float()
-                            bl = pair_bce(pair_logit[valid], tgt[valid])
-                            loss = loss + self.pair_loss_weight * bl
+            for i, batch in enumerate(loader):
+                if paired:
+                    ids, attn, mk, mkm, gm, gt, y, tw = (
+                        t.to(self.device) for t in batch)
+                    with torch.amp.autocast("cuda", enabled=self.fp16 and
+                                            self.device.type == "cuda"):
+                        logits, _ = self.model(ids, attn, mk, mkm)
+                    ce, mrg, cons = twin_loss(logits, gm, gt, y, tw, w,
+                                              self.twin_margin)
+                    ramp = ((ep + i / len(loader)) - self.twin_warmup_epochs
+                            if self.twin_warmup_epochs else 1.0)
+                    ramp = min(1.0, max(0.0, ramp))
+                    loss = ce + ramp * (self.margin_weight * mrg
+                                        + self.consistency_weight * cons)
+                    parts += [ce.item(), mrg.item(), cons.item()]
+                else:
+                    ids, attn, mk, mkm, lab, _, ex = batch
+                    ids, attn = ids.to(self.device), attn.to(self.device)
+                    mk, lab = mk.to(self.device), lab.to(self.device)
+                    ex = ex.to(self.device) if ex is not None else None
+                    with torch.amp.autocast("cuda", enabled=self.fp16 and
+                                            self.device.type == "cuda"):
+                        logits, pair_logit = self.model(ids, attn, mk, mkm, ex)
+                        loss = lossf(logits.reshape(-1, 2), lab.reshape(-1))
+                        if pair_logit is not None and self.pair_loss_weight > 0:
+                            # Boundary target for pair (i-1, i): did the label
+                            # change. Masked to pairs where both are real.
+                            left, right = lab[:, :-1], lab[:, 1:]
+                            valid = (left >= 0) & (right >= 0)
+                            if valid.any():
+                                tgt = (left != right).float()
+                                bl = pair_bce(pair_logit[valid], tgt[valid])
+                                loss = loss + self.pair_loss_weight * bl
                 scaler.scale(loss / self.grad_accum).backward()
                 tot += loss.item()
                 nb += 1
@@ -375,6 +536,10 @@ class TransformerDetector:
                     sched.step()
                     opt.zero_grad(set_to_none=True)
             msg = f"  epoch {ep + 1}/{self.epochs} loss={tot / max(1, nb):.4f}"
+            if paired:
+                ce_, mg_, cs_ = parts / max(1, nb)
+                msg += (f" (ce={ce_:.4f} margin={mg_:.4f} cons={cs_:.4f} "
+                        f"ramp={ramp:.2f})")
             if dev_docs is not None and eval_fn is not None:
                 self.model.eval()
                 score = eval_fn(self)

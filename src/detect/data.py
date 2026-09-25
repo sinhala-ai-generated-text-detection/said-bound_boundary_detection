@@ -26,6 +26,7 @@ class Doc:
     construction_type: str
     sentences: list[str]
     labels: list[int]
+    window_id: str = ""
 
     @property
     def n(self) -> int:
@@ -101,8 +102,53 @@ def load_dataset(cfg: dict | None = None, path=None) -> Dataset:
             record_id=r["record_id"], source_id=r["source_id"],
             split=r["split"], generator=r["generator"],
             construction_type=r["construction_type"],
-            sentences=sents, labels=labels))
+            sentences=sents, labels=labels,
+            window_id=r.get("window_id", "")))
     return Dataset(docs)
+
+
+def load_twins(docs: list[Doc], cfg: dict | None = None,
+               path=None) -> tuple[list[Doc], list[float]]:
+    """The all-human counterfactual twin of each mixed document.
+
+    Construction *replaces* human sentences rather than inserting new ones, so
+    the source window is the same document with every AI sentence swapped back
+    for the human sentence it displaced: same topic, same length, same
+    positions, only authorship differs. That makes it a free, exactly aligned
+    negative for the replaced positions.
+
+    Returns twins aligned 1:1 with `docs`, plus a per-twin weight of 1/k where
+    k is how many of `docs` share that window. Several records can derive from
+    one window, and without the weight its human text would count k times.
+
+    Alignment is verified, not assumed: a mismatch raises rather than silently
+    producing a twin whose sentence i is not the counterpart of sentence i.
+    """
+    from collections import Counter
+    cfg = cfg or load_config()
+    path = path or Path(cfg["paths"]["sources"]).parent / "windows.jsonl"
+    wanted = {d.window_id for d in docs}
+    if "" in wanted:
+        raise ValueError("documents carry no window_id; rebuild combined.jsonl")
+    windows = {w["window_id"]: w["sentences"] for w in read_jsonl(path)
+               if w["window_id"] in wanted}
+    uses = Counter(d.window_id for d in docs)
+    twins, weights = [], []
+    for d in docs:
+        ws = windows.get(d.window_id)
+        if ws is None:
+            raise ValueError(f"{d.record_id}: window {d.window_id} not found")
+        if len(ws) != d.n or any(a != b for a, b, y in
+                                 zip(ws, d.sentences, d.labels) if y == 0):
+            raise ValueError(f"{d.record_id}: human sentences do not align "
+                             f"with window {d.window_id}")
+        twins.append(Doc(
+            record_id=d.record_id + "__twin", source_id=d.source_id,
+            split=d.split, generator=d.generator,
+            construction_type=d.construction_type,
+            sentences=list(ws), labels=[0] * d.n, window_id=d.window_id))
+        weights.append(1.0 / uses[d.window_id])
+    return twins, weights
 
 
 def role_map(cfg: dict) -> dict[str, str]:
