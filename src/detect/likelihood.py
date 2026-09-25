@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from data import load_dataset, role_map  # noqa: E402
 from utils import force_utf8_stdout, load_config  # noqa: E402
 
-CACHE = Path("reports/evidence/likelihood_features.jsonl")
+CACHE = Path("cache/likelihood_features.jsonl")
 
 # Order matters: it is the feature-vector layout used by consumers.
 FEATURE_NAMES = [

@@ -1,4 +1,4 @@
-"""Train and evaluate boundary detectors, and write reports/detector_report.md.
+"""Train and evaluate boundary detectors, and write reports/detection/linear.md.
 
 Protocol, and why it is shaped this way:
 
@@ -65,8 +65,8 @@ def main() -> None:
     force_utf8_stdout()
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.yaml")
-    ap.add_argument("--out", default="reports/detector_report.md")
-    ap.add_argument("--json-out", default="reports/detector_results.json")
+    ap.add_argument("--out", default="reports/detection/linear.md")
+    ap.add_argument("--json-out", default="reports/detection/linear.json")
     a = ap.parse_args()
 
     cfg = load_config(a.config)
@@ -139,8 +139,12 @@ def main() -> None:
         m = LinearDetector(seed=cfg["seed"], **kwargs).fit(train.docs)
         r = slice_report(m, test, rm, smooth=smooth)
         name = f"{label}"
-        results.append({"name": name, "kind": "linear",
-                        "params": {k: str(v) for k, v in kwargs.items()},
+        # The feature map is data, not a hyperparameter; stringifying it once
+        # wrote ~9 MB per row into the results file.
+        params = {k: str(v) for k, v in kwargs.items() if k != "feat_map"}
+        if "feat_map" in kwargs:
+            params["likelihood_features"] = "True"
+        results.append({"name": name, "kind": "linear", "params": params,
                         "smooth": smooth, **r})
         o, s, h = r["overall"], r["seen"], r["held_out"]
         print(f"  {name:30s} overall F1={o['sentence']['f1_ai']:.3f}  "

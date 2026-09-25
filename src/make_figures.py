@@ -1,4 +1,4 @@
-"""Publication figures for the paper (vector PDF + PNG preview).
+"""Result figures (vector PDF + PNG preview), written to reports/figures/.
 
 Sized for a two-column ACL layout: single-column figures are 3.15in wide,
 double-column 6.3in. Everything is drawn from the committed result JSON and the
@@ -36,7 +36,7 @@ GRID = "#d8d7d2"
 SINGLE = 3.15   # inches, one ACL column
 DOUBLE = 6.30
 
-OUT = Path("paper/figures")
+OUT = Path("reports/figures")
 
 
 def style() -> None:
@@ -267,8 +267,8 @@ def main() -> None:
     force_utf8_stdout()
     style()
     cfg = load_config()
-    lin = json.loads(Path("reports/detector_results.json").read_text(encoding="utf-8"))
-    tr = json.loads(Path("reports/transformer_results.json").read_text(encoding="utf-8"))
+    lin = json.loads(Path("reports/detection/linear.json").read_text(encoding="utf-8"))
+    tr = json.loads(Path("reports/detection/xlmr.json").read_text(encoding="utf-8"))
     print("generating figures ->", OUT)
     fig_boundary_positions(cfg)
     fig_model_comparison(lin, tr)

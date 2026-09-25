@@ -1,4 +1,4 @@
-"""Figures for the Sinhala-ABD section of the data paper.
+"""Dataset figures, written to reports/figures/.
 
 A data paper's figures should describe the *data*, not detector performance, so
 these are: the three construction schemas, and the distribution of boundary
@@ -29,7 +29,7 @@ INK_2 = "#52514e"
 GRID = "#d8d7d2"
 
 WIDTH = 5.5            # NeurIPS text width, inches
-OUT = Path("paper/figures")
+OUT = Path("reports/figures")
 
 
 def style() -> None:

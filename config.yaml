@@ -153,7 +153,7 @@ generators:
     reasoning: null
   # Replaced mistralai/mistral-nemo after the pilot: its Sinhala was
   # degenerate word-salad that also leaked prompt instructions into the output
-  # text. See reports/pilot_report.md and reports/evidence/.
+  # text. See reports/generation/.
   gpt_4o:
     slug: openai/gpt-4o-2024-11-20     # dated slug pinned for reproducibility
     role: seen

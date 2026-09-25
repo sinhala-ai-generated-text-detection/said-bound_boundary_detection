@@ -5,11 +5,11 @@ the SAME span plan, so differences in the output are attributable to the model
 and nothing else. The pilot cannot answer this on its own: it assigns different
 windows to each generator, and the held-out generator only sees dev/test.
 
-Writes reports/model_comparison.md:
+Writes reports/generation/model_comparison.md:
   - an at-a-glance table, one row per example, one column per model
   - a per-example table putting the human original beside every model's text
 
-Results are cached in reports/evidence/model_comparison.jsonl, so re-running to
+Results are cached in reports/generation/evidence/model_comparison.jsonl, so re-running to
 re-render the markdown costs nothing.
 
     python src/compare_models.py --per-type 3
@@ -37,7 +37,7 @@ from utils import (  # noqa: E402
     write_jsonl,
 )
 
-CACHE = "reports/evidence/model_comparison.jsonl"
+CACHE = "reports/generation/evidence/model_comparison.jsonl"
 
 
 def human_counterpart(window: dict, plan: dict) -> list[str]:
@@ -336,7 +336,7 @@ def main() -> None:
     else:
         rows = collect(cfg, a.per_type, gens)
 
-    out = Path(cfg["paths"]["reports_dir"]) / "model_comparison.md"
+    out = Path(cfg["paths"]["reports_dir"]) / "generation" / "model_comparison.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(cfg, rows, gens), encoding="utf-8")
     print(f"wrote -> {out}")

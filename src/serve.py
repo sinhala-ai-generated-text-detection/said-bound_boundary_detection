@@ -29,7 +29,7 @@ app = Flask(__name__)
 STATE: dict = {}
 
 MODEL_DIR = Path("models/xlmr_tagger")
-RESULTS = Path("reports/transformer_results.json")
+RESULTS = Path("reports/detection/xlmr.json")
 
 
 # ------------------------------------------------------------------ model ---

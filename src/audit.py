@@ -32,7 +32,7 @@ def _hist(ax, values, title, xlabel, bins=20, color="#4C72B0"):
 def run(cfg: dict) -> dict:
     force_utf8_stdout()
     gdir = Path(cfg["paths"]["generated_dir"])
-    rdir = Path(cfg["paths"]["reports_dir"])
+    rdir = Path(cfg["paths"]["reports_dir"]) / "dataset"
     rdir.mkdir(parents=True, exist_ok=True)
 
     records = list(read_jsonl(gdir / "combined.jsonl"))

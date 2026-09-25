@@ -1,11 +1,11 @@
-"""Build reports/pilot_report.md from the pilot artefacts.
+"""Build reports/generation/pilot_report.md from the pilot artefacts.
 
 Computes every quantitative part of the gate report: per-generator validation
 pass-rates and failure breakdowns, worked examples with their labels, observed
 cost per record, and the extrapolated full-run cost from config.full_run.
 
 The Sinhala-fluency assessment is a human judgement and is written into
-`reports/fluency_assessment.md`; if that file exists it is spliced in, so
+`reports/generation/fluency_assessment.md`; if that file exists it is spliced in, so
 re-running this script never overwrites the qualitative section.
 """
 from __future__ import annotations
@@ -187,11 +187,11 @@ def build(cfg: dict) -> str:
     # --------------------------------------------- fluency (human-written) --
     L.append("## Sinhala fluency assessment")
     L.append("")
-    frag = Path(cfg["paths"]["reports_dir"]) / "fluency_assessment.md"
+    frag = Path(cfg["paths"]["reports_dir"]) / "generation" / "fluency_assessment.md"
     if frag.exists():
         L.append(frag.read_text(encoding="utf-8").strip())
     else:
-        L.append("_Not yet written. Create `reports/fluency_assessment.md`; "
+        L.append("_Not yet written. Create `reports/generation/fluency_assessment.md`; "
                  "its contents are spliced in here._")
     L.append("")
     return "\n".join(L)
@@ -199,7 +199,7 @@ def build(cfg: dict) -> str:
 
 def run(cfg: dict) -> None:
     force_utf8_stdout()
-    rdir = Path(cfg["paths"]["reports_dir"])
+    rdir = Path(cfg["paths"]["reports_dir"]) / "generation"
     rdir.mkdir(parents=True, exist_ok=True)
     out = rdir / "pilot_report.md"
     out.write_text(build(cfg), encoding="utf-8")

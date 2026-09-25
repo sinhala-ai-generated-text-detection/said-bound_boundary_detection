@@ -86,8 +86,8 @@ def main() -> None:
     ap.add_argument("--no-fp16", action="store_true")
     ap.add_argument("--cpu", action="store_true")
     ap.add_argument("--save-to", default="models/xlmr_tagger")
-    ap.add_argument("--json-out", default="reports/transformer_results.json")
-    ap.add_argument("--out", default="reports/transformer_report.md")
+    ap.add_argument("--json-out", default="reports/detection/xlmr.json")
+    ap.add_argument("--out", default="reports/detection/xlmr.md")
     a = ap.parse_args()
 
     import torch
@@ -282,7 +282,7 @@ def main() -> None:
 
 
 def write_report(path: Path, p: dict) -> None:
-    lin_path = Path("reports/detector_results.json")
+    lin_path = Path("reports/detection/linear.json")
     lin = json.loads(lin_path.read_text(encoding="utf-8")) if lin_path.exists() else None
 
     def row(label, m):
