@@ -11,7 +11,11 @@ is not versioned, the run order, and how long each stage takes.
 
 Two machines are supported. Results up to the three-seed runs were produced on
 the laptop; the DGX Spark reproduces the baseline to within 0.001 on every
-metric (GPU floating-point differences).
+metric (GPU floating-point differences). The four-condition experiment and the
+surface-noise check ran on the Spark. Fine-tuning runs with the same seed do
+not reproduce exactly across the two machines (the seed-42 control scores
+0.593 on the laptop and 0.614 on the Spark, within the laptop's own seed
+spread), so conditions are only compared within one machine.
 
 | component | laptop | DGX Spark |
 |---|---|---|
@@ -133,6 +137,60 @@ python src/detect/summarize_seeds.py twin_ft=twin_ft,twin_ft_s43,twin_ft_s44 \
     control=xlmr_ft,xlmr_ft_s43,xlmr_ft_s44 --out results/detection/twins/twin_ft_seeds
 ```
 
+Is it the twin, or any human text? Four fine-tuning conditions, seed by seed
+(each run writes `results/detection/twins/<tag>.{md,json}`):
+
+```bash
+C="--init-from models/xlmr_tagger --epochs 3 --lr 1e-5 --batch-size 4 --grad-accum 1"
+for s in 42 43 44; do
+  python src/detect/run_transformer.py $C --seed $s --tag ft_control_s$s \
+      --save-to models/ft_control_s$s
+  python src/detect/run_transformer.py $C --seed $s --tag ft_unrelated_s$s \
+      --save-to models/ft_unrelated_s$s --twins --twin-source unrelated \
+      --margin-weight 0 --consistency-weight 0
+  python src/detect/run_transformer.py $C --seed $s --tag ft_twins_unpaired_s$s \
+      --save-to models/ft_twins_unpaired_s$s --twins \
+      --margin-weight 0 --consistency-weight 0
+  python src/detect/run_transformer.py $C --seed $s --tag ft_twins_paired_s$s \
+      --save-to models/ft_twins_paired_s$s --twins
+done
+python src/detect/run_transformer.py --eval-only models/xlmr_tagger --tag xlmr_rescored_spark
+
+g() { echo "$1=ft_$1_s42,ft_$1_s43,ft_$1_s44"; }
+python src/detect/summarize_seeds.py $(g control) $(g unrelated) $(g twins_unpaired) \
+    $(g twins_paired) --out results/detection/twins/four_conditions
+for p in "twins_paired unrelated" "twins_unpaired unrelated" \
+         "twins_paired twins_unpaired" "unrelated control"; do
+  set -- $p
+  python src/detect/summarize_seeds.py $(g $1) $(g $2) \
+      --out results/detection/twins/four_conditions_$1_vs_$2
+done
+
+# threshold sweep over the 12 models (the laptop sweep is twin_tradeoff_laptop.*)
+args="base=models/xlmr_tagger"
+for c in control unrelated twins_unpaired twins_paired; do
+  for s in 42 43 44; do args="$args ${c}_s$s=models/ft_${c}_s$s"; done
+done
+python src/detect/twin_tradeoff.py $args
+```
+
+Surface-noise check (inference only):
+
+```bash
+python src/detect/run_transformer.py --eval-only models/xlmr_tagger \
+    --normalize-surface --tag xlmr_normsurface
+for c in control unrelated twins_unpaired twins_paired; do
+  python src/detect/run_transformer.py --eval-only models/ft_${c}_s42 \
+      --normalize-surface --tag ft_${c}_s42_normsurface
+done
+python src/detect/surface_noise.py base=xlmr_rescored_spark:xlmr_normsurface \
+    control=ft_control_s42:ft_control_s42_normsurface \
+    unrelated=ft_unrelated_s42:ft_unrelated_s42_normsurface \
+    twins_unpaired=ft_twins_unpaired_s42:ft_twins_unpaired_s42_normsurface \
+    twins_paired=ft_twins_paired_s42:ft_twins_paired_s42_normsurface \
+    --out results/detection/surface_noise
+```
+
 `--limit N` runs any training command on N documents per split as a smoke test.
 
 ### 5. Figures, tests and the demo
@@ -145,17 +203,19 @@ python src/app/serve.py                 # try the tagger at http://127.0.0.1:500
 
 ## Runtimes and cost
 
-Measured on the hardware above.
+Measured on the hardware above. Wall time includes loading and test scoring.
 
-| stage | time |
-|---|---|
-| dataset generation (11,587 API calls) | ~$26.73 in API cost |
-| likelihood features, full corpus | 45 min |
-| XLM-R tagger, 8 epochs | 109 min |
-| twin training from scratch, 8 epochs | 72–159 min |
-| twin fine-tuning, 3 epochs | 29–40 min |
-| control fine-tuning, 3 epochs | 17–30 min |
-| re-scoring a saved model (`--eval-only`) | ~1.5 min |
+| stage | laptop | DGX Spark |
+|---|---|---|
+| dataset generation (11,587 API calls) | ~$26.73 in API cost | |
+| likelihood features, full corpus | 45 min | |
+| XLM-R tagger, 8 epochs | 109 min | |
+| twin training from scratch, 8 epochs | 72–159 min | |
+| twin fine-tuning, 3 epochs (matched or unrelated) | 29–40 min | 12.6–13.3 min |
+| control fine-tuning, 3 epochs | 17–30 min | 7.2–7.4 min |
+| re-scoring a saved model (`--eval-only`) | ~1.5 min | ~0.9 min |
+| threshold sweep over 13 models | | 3 min |
+| the four-condition experiment (12 runs), end to end | | 2 h 17 min |
 
 Twin training runs twice as many documents per epoch as the baseline, since
 every document is paired with its twin.

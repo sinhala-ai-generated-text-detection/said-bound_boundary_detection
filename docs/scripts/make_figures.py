@@ -52,7 +52,7 @@ def style(theme: str) -> None:
     T.update(THEMES[theme])
     plt.rcParams.update({
         "font.family": "sans-serif",
-        "font.sans-serif": ["Segoe UI", "Helvetica Neue", "Arial",
+        "font.sans-serif": ["Segoe UI", "Helvetica Neue", "Arial", "Liberation Sans",
                             "DejaVu Sans"],
         "font.size": 10, "axes.titlesize": 11, "axes.labelsize": 10,
         "xtick.labelsize": 9.5, "ytick.labelsize": 9.5, "legend.fontsize": 9.5,
@@ -227,7 +227,7 @@ def fig_breakdown(theme: str) -> None:
 
 # ------------------------------------------------- 4. twin trade-off ---
 def fig_tradeoff(theme: str) -> None:
-    tr = load("twins/twin_tradeoff.json")
+    tr = load("twins/twin_tradeoff_laptop.json")
     runs = [  # (key, label) in fixed palette order
         ("base", "XLM-R baseline"),
         ("twin_ft", "twins, fine-tuned"),
@@ -309,6 +309,58 @@ def fig_seeds(theme: str) -> None:
     save(fig, "fig5-seeds", theme)
 
 
+# ----------------------------------------------- 6. four conditions ---
+def fig_conditions(theme: str) -> None:
+    """Is it the twin, or any human text? Same encoding as fig5."""
+    s = load("twins/four_conditions.json")["metrics"]
+    panels = [
+        ("unrelated-human false-alarm rate",
+         "Unrelated human documents with\na false alarm, threshold (%)", 100,
+         "{:.0f}%", (0, 105)),
+        ("unrelated-human false-alarm rate (Viterbi)",
+         "Unrelated human documents with\na false alarm, Viterbi (%)", 100,
+         "{:.0f}%", (0, 105)),
+        ("exact-boundary F1, mixed (Viterbi)",
+         "Exact-boundary F1,\nmixed documents only", 1, "{:.3f}", None),
+    ]
+    groups = [("control", "no human\ndocuments"),
+              ("unrelated", "unrelated\nhuman"),
+              ("twins_unpaired", "twins,\nCE only"),
+              ("twins_paired", "twins +\npaired terms")]
+    fig, axes = plt.subplots(1, 3, figsize=(10.4, 3.8))
+    for ax, (key, title, scale, fmt, ylim) in zip(axes, panels):
+        for j, ((g, _), color) in enumerate(zip(groups, T["series"])):
+            vals = scale * np.array(s[key][g])
+            m, sd = vals.mean(), vals.std(ddof=1)
+            ax.plot([j, j], [m - sd, m + sd], color=color, linewidth=2,
+                    solid_capstyle="round", zorder=2)
+            ax.plot(j, m, "o", ms=10, color=color,
+                    markeredgecolor=T["surface"], markeredgewidth=2, zorder=4)
+            ax.scatter(np.full(len(vals), j + 0.22), vals, s=20,
+                       facecolor=T["surface"], edgecolor=color, linewidth=1.3,
+                       zorder=3)
+            ax.annotate(fmt.format(m), (j, m), xytext=(-9, 0),
+                        textcoords="offset points", ha="right", va="center",
+                        fontsize=8.5, color=T["ink2"])
+        ax.set_xticks(range(len(groups)))
+        ax.set_xticklabels([g[1] for g in groups], fontsize=8.5)
+        ax.set_xlim(-0.8, len(groups) - 0.4)
+        if ylim:
+            ax.set_ylim(*ylim)
+        else:
+            lo = min(scale * min(s[key][g]) for g, _ in groups)
+            hi = max(scale * max(s[key][g]) for g, _ in groups)
+            pad = (hi - lo) * 0.35
+            ax.set_ylim(lo - pad, hi + pad)
+        ax.set_title(title, loc="left", fontsize=10)
+        recessive(ax)
+    fig.tight_layout(w_pad=2.0)
+    fig.text(0.01, -0.03, "Large dot: mean of 3 seeds  ·  line: ±1 standard "
+             "deviation  ·  small dots: individual seeds", fontsize=8.5,
+             color=T["ink2"])
+    save(fig, "fig6-conditions", theme)
+
+
 def main() -> None:
     for theme in THEMES:
         style(theme)
@@ -317,6 +369,7 @@ def main() -> None:
         fig_breakdown(theme)
         fig_tradeoff(theme)
         fig_seeds(theme)
+        fig_conditions(theme)
 
 
 if __name__ == "__main__":

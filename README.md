@@ -7,7 +7,7 @@ fine-tuned XLM-RoBERTa tagger, and counterfactual-twin training for purely human
 [![Python](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](docs/reproducing.md#environment)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.6%20·%20CUDA%2012.4-EE4C2C?logo=pytorch&logoColor=white)](docs/reproducing.md#environment)
 [![Transformers](https://img.shields.io/badge/transformers-5.16-FFD21E)](docs/reproducing.md#environment)
-[![Tests](https://img.shields.io/badge/tests-121%20passing-1baf7a)](tests/)
+[![Tests](https://img.shields.io/badge/tests-131%20passing-1baf7a)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Every document mixes human sentences with sentences written by a large language model. Each
@@ -25,10 +25,13 @@ The task is to recover those boundaries from the text alone.
 - **Detectors trained on mixed documents invent machine text in human documents.** Shown the
   all-human version of each test document, the tagger flags machine text in **95%** of them,
   and **no decision threshold brings that below 93%**.
-- **Counterfactual twins fix much of it.** Fine-tuning on each document together with its
-  all-human twin cuts those false alarms from 95% to **58%**, on every one of three seeds,
-  and raises exact-boundary F1 over mixed and human documents by 4 points. The cost is about
-  1 point of F1 on mixed documents alone.
+- **Human-only training text fixes much of it, and twins add a little more.** Fine-tuning
+  on each document together with its all-human twin cuts those false alarms from 95% to
+  **58%**, on every one of three seeds, and raises exact-boundary F1 over mixed and human
+  documents by 4 points, for about 1 point of F1 on mixed documents alone. But **unrelated
+  human documents of the same length get most of the way (60%)**. Content matching and the
+  paired losses it enables add a smaller, consistent gain: 2–5 points of false alarms with
+  threshold decoding, 13–15 with Viterbi decoding.
 - **Language-model likelihood transfers across generators.** On the unseen generator, a
   detector given only likelihood features, and no text, beats character n-grams on sentence
   F1 (0.588 vs 0.571).
@@ -72,6 +75,17 @@ lowest rate, 24%, at a larger accuracy cost.
 control given the same three epochs without them. The false-alarm reduction is 37.1 ± 0.7
 points and holds on every seed; the mixed-document cost is 1.0 ± 1.0 points.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/fig6-conditions-dark.png">
+  <img alt="Four conditions over three seeds. Unrelated human documents with a false alarm, threshold decoding: no human documents 93%, unrelated human 60%, twins CE only 62%, twins plus paired terms 58%. With Viterbi decoding: 99%, 91%, 84%, 76%. Exact-boundary F1 on mixed documents: 0.617, 0.618, 0.615, 0.604." src="docs/assets/fig6-conditions-light.png">
+</picture>
+
+**Is it the twin, or any human text?** Four fine-tuning conditions, three seeds each, with
+false alarms measured on 618 human test documents unrelated to any mixed document. Adding
+unrelated human text gives most of the reduction. Content-matched twins, and the paired
+losses they make possible, lower false alarms further on every seed, most clearly with
+Viterbi decoding, at about one point of mixed-document F1.
+
 ### At a glance
 
 | | Question | Answer | Evidence |
@@ -79,9 +93,11 @@ points and holds on every seed; the mixed-document cost is 1.0 ± 1.0 points.
 | **1** | Can text be localised better than position alone? | Yes: 0.603 vs 0.284 exact-boundary F1 | [xlmr](results/detection/xlmr/xlmr.md) |
 | **2** | Does it hold for an unseen generator? | Partly: 0.556 vs 0.628 | [xlmr](results/detection/xlmr/xlmr.md) |
 | **3** | Do likelihood features help? | Linear model yes, XLM-R no (redundant) | [linear](results/detection/baselines/linear.md), [xlmr_likelihood](results/detection/xlmr/xlmr_likelihood.md) |
-| **4** | Does the tagger stay quiet on human documents? | No: 95% false alarms at any threshold | [twin_tradeoff](results/detection/twins/twin_tradeoff.md) |
+| **4** | Does the tagger stay quiet on human documents? | No: 95% false alarms at any threshold | [twin_tradeoff_laptop](results/detection/twins/twin_tradeoff_laptop.md) |
 | **5** | Do counterfactual twins reduce that? | Yes: 95% → 58%, 3/3 seeds | [twin_ft_seeds](results/detection/twins/twin_ft_seeds.md) |
 | **6** | At what cost on mixed documents? | About 1 point exact-boundary F1 | [twin_ft_seeds](results/detection/twins/twin_ft_seeds.md) |
+| **7** | Is it the twin, or any human text? | Mostly any human text: unrelated 60% vs twins 58%; twins add 2–5 points (threshold), 13–15 (Viterbi) | [four_conditions](results/detection/twins/four_conditions.md) |
+| **8** | Do formatting cues drive the scores? | No: removing them changes F1 by ≤ 1.2 points | [surface_noise](results/detection/surface_noise.md) |
 
 ## Dataset
 
@@ -142,7 +158,7 @@ development data restricted to seen generators, and report on test overall, seen
 ├── docs/                   # methodology pages
 │   ├── assets/             #   figures (light and dark)
 │   └── scripts/make_figures.py  # regenerates every figure from results/
-├── tests/                  # 121 unit tests
+├── tests/                  # 131 unit tests
 ├── splits/                 # train/dev/test source-article ids
 ├── prompts/                # Sinhala prompt templates
 ├── config.yaml             # every tunable setting
@@ -179,8 +195,8 @@ order and runtimes.
 | [Dataset construction](docs/dataset.md) | Sources, cleaning, segmentation, splits, generators, construction types, prompts, validation |
 | [Detectors](docs/detectors.md) | The task, every metric, the protocol, baselines, the linear model, the XLM-R tagger |
 | [Likelihood features](docs/likelihood.md) | Masked-LM likelihood as a detection signal, and why it is redundant inside XLM-R |
-| [Counterfactual twins](docs/counterfactual-twins.md) | False alarms on human text, twin training, the collapse and its fix, seeds, operating points |
-| [Limitations](docs/limitations.md) | Surface-noise confound, positional and length priors, selection protocol, scope |
+| [Counterfactual twins](docs/counterfactual-twins.md) | False alarms on human text, twin training, the collapse and its fix, seeds, operating points, twins versus unrelated human text |
+| [Limitations](docs/limitations.md) | Surface noise and its measured effect, positional and length priors, selection protocol, scope |
 | [Reproducing](docs/reproducing.md) | Environment, what is versioned, run order, runtimes |
 
 ## Limitations
@@ -188,10 +204,11 @@ order and runtimes.
 - **One domain.** Only encyclopedic Wikipedia prose is covered.
 - **One held-out generator.** Generalisation is measured against Gemini 2.5 Pro alone.
 - **Surface cues.** Human Wikipedia sentences carry typographical noise that generator output
-  lacks (a space before punctuation in 3.6% of human sentences against 0.01% of machine ones),
-  so part of any detector's score may come from formatting.
-- **Seeds.** Twin fine-tuning and its control have three seeds; other transformer results are
-  single runs.
+  lacks (a space before punctuation in 3.6% of human sentences against 0.01% of machine ones).
+  Normalizing it away changes the XLM-R taggers' scores by at most 1.2 points of F1, but
+  parentheses and Latin text, which are content, stay imbalanced and were not tested.
+- **Seeds.** Twin fine-tuning, its control and the four-condition experiment have three seeds;
+  other transformer results are single runs.
 - **No human ceiling.** No annotation study establishes how well Sinhala readers do on the task.
 
 ## License
