@@ -1,0 +1,276 @@
+{
+  "features_test": {
+    "raw": {
+      "human": {
+        "n": 5309,
+        "space before punctuation": 0.028065549067621022,
+        "parentheses": 0.1137690713882087,
+        "no final punctuation": 0.032209455641363724,
+        "Latin characters": 0.11885477491052929,
+        "zero-width non-joiner": 0.0032021096251648143,
+        "curly quotes": 0.013938594838952722
+      },
+      "machine": {
+        "n": 3146,
+        "space before punctuation": 0.0003178639542275906,
+        "parentheses": 0.03337571519389701,
+        "no final punctuation": 0.0003178639542275906,
+        "Latin characters": 0.05785123966942149,
+        "zero-width non-joiner": 0.0,
+        "curly quotes": 0.004132231404958678
+      }
+    },
+    "normalized": {
+      "human": {
+        "n": 5309,
+        "space before punctuation": 0.0,
+        "parentheses": 0.1137690713882087,
+        "no final punctuation": 0.0,
+        "Latin characters": 0.11885477491052929,
+        "zero-width non-joiner": 0.0,
+        "curly quotes": 0.0
+      },
+      "machine": {
+        "n": 3146,
+        "space before punctuation": 0.0,
+        "parentheses": 0.03337571519389701,
+        "no final punctuation": 0.0,
+        "Latin characters": 0.05785123966942149,
+        "zero-width non-joiner": 0.0,
+        "curly quotes": 0.0
+      }
+    }
+  },
+  "models": {
+    "base": {
+      "raw_run": "xlmr_rescored_spark",
+      "normalized_run": "xlmr_normsurface",
+      "metrics": {
+        "sentence F1 (Viterbi)": {
+          "raw": 0.7917957798435885,
+          "normalized": 0.7903344629438632,
+          "change": -0.0014613168997252846
+        },
+        "sentence F1 (threshold)": {
+          "raw": 0.8021325209444021,
+          "normalized": 0.7999403252275101,
+          "change": -0.002192195716891998
+        },
+        "exact-boundary F1, mixed (Viterbi)": {
+          "raw": 0.6037372375264881,
+          "normalized": 0.6018447348193698,
+          "change": -0.001892502707118271
+        },
+        "exact-boundary F1, mixed (threshold)": {
+          "raw": 0.6031256878714506,
+          "normalized": 0.5930792816469558,
+          "change": -0.01004640622449482
+        },
+        "exact-boundary F1, held-out (Viterbi)": {
+          "raw": 0.5489983757444504,
+          "normalized": 0.5440778799351,
+          "change": -0.004920495809350389
+        },
+        "twin false-alarm rate": {
+          "raw": 0.9532871972318339,
+          "normalized": 0.9653979238754326,
+          "change": 0.01211072664359869
+        },
+        "unrelated-human false-alarm rate": {
+          "raw": 0.9352750809061489,
+          "normalized": 0.9498381877022654,
+          "change": 0.014563106796116498
+        },
+        "sentence FPR, unrelated human": {
+          "raw": 0.24118502362777172,
+          "normalized": 0.2682660850599782,
+          "change": 0.027081061432206455
+        }
+      }
+    },
+    "control": {
+      "raw_run": "ft_control_s42",
+      "normalized_run": "ft_control_s42_normsurface",
+      "metrics": {
+        "sentence F1 (Viterbi)": {
+          "raw": 0.786692759295499,
+          "normalized": 0.774721189591078,
+          "change": -0.011971569704420926
+        },
+        "sentence F1 (threshold)": {
+          "raw": 0.7980416156670747,
+          "normalized": 0.7956204379562043,
+          "change": -0.002421177710870359
+        },
+        "exact-boundary F1, mixed (Viterbi)": {
+          "raw": 0.6141527001862197,
+          "normalized": 0.608527811896824,
+          "change": -0.005624888289395669
+        },
+        "exact-boundary F1, mixed (threshold)": {
+          "raw": 0.6052009456264775,
+          "normalized": 0.6013716245177884,
+          "change": -0.0038293211086891654
+        },
+        "exact-boundary F1, held-out (Viterbi)": {
+          "raw": 0.5550935550935551,
+          "normalized": 0.547244094488189,
+          "change": -0.007849460605366065
+        },
+        "twin false-alarm rate": {
+          "raw": 0.9602076124567474,
+          "normalized": 0.9653979238754326,
+          "change": 0.005190311418685201
+        },
+        "unrelated-human false-alarm rate": {
+          "raw": 0.9498381877022654,
+          "normalized": 0.9611650485436893,
+          "change": 0.01132686084142398
+        },
+        "sentence FPR, unrelated human": {
+          "raw": 0.2529989094874591,
+          "normalized": 0.2651762995274446,
+          "change": 0.01217739003998547
+        }
+      }
+    },
+    "unrelated": {
+      "raw_run": "ft_unrelated_s42",
+      "normalized_run": "ft_unrelated_s42_normsurface",
+      "metrics": {
+        "sentence F1 (Viterbi)": {
+          "raw": 0.7865648854961832,
+          "normalized": 0.7846598691218992,
+          "change": -0.0019050163742839743
+        },
+        "sentence F1 (threshold)": {
+          "raw": 0.7849445069969438,
+          "normalized": 0.7805035506778566,
+          "change": -0.0044409563190872525
+        },
+        "exact-boundary F1, mixed (Viterbi)": {
+          "raw": 0.6121758737316798,
+          "normalized": 0.6086306743881935,
+          "change": -0.003545199343486294
+        },
+        "exact-boundary F1, mixed (threshold)": {
+          "raw": 0.5558240695988401,
+          "normalized": 0.5508720930232558,
+          "change": -0.004951976575584327
+        },
+        "exact-boundary F1, held-out (Viterbi)": {
+          "raw": 0.5483359746434231,
+          "normalized": 0.5517603783499737,
+          "change": 0.003424403706550616
+        },
+        "twin false-alarm rate": {
+          "raw": 0.5259515570934256,
+          "normalized": 0.5259515570934256,
+          "change": 0.0
+        },
+        "unrelated-human false-alarm rate": {
+          "raw": 0.5048543689320388,
+          "normalized": 0.4967637540453074,
+          "change": -0.008090614886731406
+        },
+        "sentence FPR, unrelated human": {
+          "raw": 0.11195928753180662,
+          "normalized": 0.11250454380225372,
+          "change": 0.0005452562704471031
+        }
+      }
+    },
+    "twins_unpaired": {
+      "raw_run": "ft_twins_unpaired_s42",
+      "normalized_run": "ft_twins_unpaired_s42_normsurface",
+      "metrics": {
+        "sentence F1 (Viterbi)": {
+          "raw": 0.7918303220738412,
+          "normalized": 0.7838258164852254,
+          "change": -0.008004505588615762
+        },
+        "sentence F1 (threshold)": {
+          "raw": 0.7969250480461243,
+          "normalized": 0.7944239705175452,
+          "change": -0.0025010775285790876
+        },
+        "exact-boundary F1, mixed (Viterbi)": {
+          "raw": 0.6205128205128205,
+          "normalized": 0.6199662858213149,
+          "change": -0.0005465346915056735
+        },
+        "exact-boundary F1, mixed (threshold)": {
+          "raw": 0.5815702867889045,
+          "normalized": 0.576,
+          "change": -0.005570286788904588
+        },
+        "exact-boundary F1, held-out (Viterbi)": {
+          "raw": 0.5558674901740596,
+          "normalized": 0.5527851458885942,
+          "change": -0.003082344285465388
+        },
+        "twin false-alarm rate": {
+          "raw": 0.5622837370242214,
+          "normalized": 0.5622837370242214,
+          "change": 0.0
+        },
+        "unrelated-human false-alarm rate": {
+          "raw": 0.5711974110032363,
+          "normalized": 0.5792880258899676,
+          "change": 0.008090614886731351
+        },
+        "sentence FPR, unrelated human": {
+          "raw": 0.12159214830970556,
+          "normalized": 0.12486368593238822,
+          "change": 0.0032715376226826604
+        }
+      }
+    },
+    "twins_paired": {
+      "raw_run": "ft_twins_paired_s42",
+      "normalized_run": "ft_twins_paired_s42_normsurface",
+      "metrics": {
+        "sentence F1 (Viterbi)": {
+          "raw": 0.789381656334446,
+          "normalized": 0.7867132867132867,
+          "change": -0.00266836962115935
+        },
+        "sentence F1 (threshold)": {
+          "raw": 0.7939844760672705,
+          "normalized": 0.7910279167339035,
+          "change": -0.002956559333367026
+        },
+        "exact-boundary F1, mixed (Viterbi)": {
+          "raw": 0.6026165167620606,
+          "normalized": 0.6029741291505397,
+          "change": 0.0003576123884790894
+        },
+        "exact-boundary F1, mixed (threshold)": {
+          "raw": 0.5739742086752638,
+          "normalized": 0.5712274114057733,
+          "change": -0.002746797269490564
+        },
+        "exact-boundary F1, held-out (Viterbi)": {
+          "raw": 0.5404761904761906,
+          "normalized": 0.5385527876631079,
+          "change": -0.0019234028130826752
+        },
+        "twin false-alarm rate": {
+          "raw": 0.5553633217993079,
+          "normalized": 0.5605536332179931,
+          "change": 0.005190311418685201
+        },
+        "unrelated-human false-alarm rate": {
+          "raw": 0.5550161812297735,
+          "normalized": 0.5614886731391586,
+          "change": 0.006472491909385147
+        },
+        "sentence FPR, unrelated human": {
+          "raw": 0.11304980007270084,
+          "normalized": 0.11795710650672482,
+          "change": 0.004907306434023984
+        }
+      }
+    }
+  }
+}
