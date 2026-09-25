@@ -117,3 +117,15 @@ def test_first_subword_labels_and_chunk_reassembly(tok):
             back[w] = int(lab[b, j])
             assert int(ids[b, pos[b, j]]) == chunks[b][0][chunks[b][1][j]]
     assert back == seen
+
+
+def test_vectorised_sweep_matches_the_first_word_rule():
+    from sweep import GRID, first_word_curve
+    rng = np.random.default_rng(0)
+    for _ in range(200):
+        n = int(rng.integers(1, 30))
+        p = rng.random(n).astype(np.float32)
+        p[rng.random(n) < 0.2] = np.nan        # tokenless words
+        got = first_word_curve(p, GRID)
+        want = [first_word(p, t) for t in GRID]
+        assert got.tolist() == want

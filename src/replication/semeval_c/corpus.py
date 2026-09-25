@@ -309,6 +309,8 @@ def main() -> None:
     # ASAP-Review, excluding ICLR 2017 (PeerRead's ICLR year).
     asap = load_asap()
     by_venue = Counter(a["venue"] for a in asap)
+    iclr17_clean = sum(clean(a["text"]) for a in asap
+                       if a["venue"] == "ICLR_2017")
     asap = [a for a in asap if a["venue"] != "ICLR_2017"]
     seen_txt, asap_ok = set(), []
     for a in asap:
@@ -318,6 +320,7 @@ def main() -> None:
         asap_ok.append(a)
     rep["asap"] = {"before": by_venue,
                    "after": Counter(a["venue"] for a in asap_ok),
+                   "iclr_2017_passing_filter": iclr17_clean,
                    "kept": len(asap_ok)}
     papers = sorted({a["paper"] for a in asap_ok})
     rng.shuffle(papers)
