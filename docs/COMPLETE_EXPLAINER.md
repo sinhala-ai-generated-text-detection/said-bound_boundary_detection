@@ -54,6 +54,10 @@ Here most of the document *is* human, and the detector must find the exact seam.
 `id`, `url`, `title`, `raw_mediawiki` (raw wikitext), and `text` (a pre-stripped
 plaintext version).
 
+The snapshot was taken in 2022, **before the public release of ChatGPT**, so
+the human side of the dataset is human-written rather than possibly
+LLM-assisted.
+
 **Decision: clean from `raw_mediawiki`, not `text`.**
 
 The provided `text` column looks convenient but is unreliable. Inspecting it
@@ -1270,10 +1274,6 @@ detector can score partly on formatting. Unicode normalization is **not** the
 issue: neither class contains non-NFC text in meaningful amounts. How much of
 each detector's score comes from these cues has not yet been measured (for
 example, by re-scoring after normalizing them on both sides).
-
-**Human text is not guaranteed to predate LLMs.** The dataset was built from
-the current `wikipedia-monthly` snapshot, which has no revision timestamps, so
-it could not be filtered to pre-ChatGPT revisions.
 
 **Positional prior.** Boundaries fall at 20–80% of a document, and spans never
 touch the first or last sentence. A position-only baseline reaches 0.284

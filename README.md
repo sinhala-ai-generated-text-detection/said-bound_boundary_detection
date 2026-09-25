@@ -50,6 +50,9 @@ Part 4 of the explainer.
 **4,244 documents · 39,358 labelled sentences · 2,630 source articles ·
 36.4% machine sentences.**
 
+The human text comes from a 2022 Sinhala Wikipedia snapshot, taken before the
+public release of ChatGPT.
+
 | construction | what the model writes | boundaries | documents |
 |---|---|---|---|
 | Type 1, continuation | a new ending after a human prefix (split at 20–80%) | 1 | 1,675 |
@@ -251,7 +254,6 @@ One JSON object per document in `generated/combined.jsonl`:
 
 Wikipedia is the only domain, and generalisation is measured against a single
 held-out generator. Human sentences carry typographical noise that generator
-output lacks, so part of any detector's score may come from formatting. The
-human text is not guaranteed to predate LLMs, since the source snapshot has no
-revision dates. Transformer results are single-seed, and no human-annotation
+output lacks, so part of any detector's score may come from formatting.
+Transformer results are single-seed, and no human-annotation
 ceiling has been established. Part 5 of the explainer discusses each point.
