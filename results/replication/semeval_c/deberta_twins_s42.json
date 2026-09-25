@@ -1,0 +1,265 @@
+{
+  "tag": "deberta_twins_s42",
+  "condition": "twins",
+  "seed": 42,
+  "model": "microsoft/deberta-v3-base",
+  "epochs": 5,
+  "lr": 2e-05,
+  "batch_size": 8,
+  "max_length": 512,
+  "limit": 0,
+  "class_weight": [
+    1.6726284923153507,
+    0.7131962523837161
+  ],
+  "train": {
+    "mixed_docs": 3649,
+    "mixed_words": 864153,
+    "human_docs": 1831,
+    "human_words": 449892
+  },
+  "best_epoch": 5,
+  "best_dev_mae": 2.4257425742574257,
+  "history": [
+    {
+      "epoch": 1,
+      "loss": 0.13592545552201138,
+      "dev_mae": 4.396039603960396,
+      "minutes": 5.294417405128479
+    },
+    {
+      "epoch": 2,
+      "loss": 0.02293774392999199,
+      "dev_mae": 3.413861386138614,
+      "minutes": 5.296195030212402
+    },
+    {
+      "epoch": 3,
+      "loss": 0.013335347124138796,
+      "dev_mae": 2.483168316831683,
+      "minutes": 5.270108977953593
+    },
+    {
+      "epoch": 4,
+      "loss": 0.009073368130752862,
+      "dev_mae": 3.120792079207921,
+      "minutes": 5.263497976462046
+    },
+    {
+      "epoch": 5,
+      "loss": 0.0066885808722035,
+      "dev_mae": 2.4257425742574257,
+      "minutes": 5.275157153606415
+    }
+  ],
+  "train_minutes": 26.480135945479073,
+  "eval_minutes": 4.251981743176779,
+  "first_word": {
+    "dev": {
+      "n": 505,
+      "mae": 2.4257425742574257,
+      "exact": 0.5287128712871287
+    },
+    "test": {
+      "overall": {
+        "n": 11123,
+        "mae": 19.25505708891486,
+        "exact": 0.21100422547873776
+      },
+      "by_domain": {
+        "outfox": {
+          "n": 4000,
+          "mae": 23.12,
+          "exact": 0.1585
+        },
+        "peerread": {
+          "n": 7123,
+          "mae": 17.084655341850343,
+          "exact": 0.24048855819177312
+        }
+      },
+      "by_generator": {
+        "outfox/gpt4": {
+          "n": 1000,
+          "mae": 8.324,
+          "exact": 0.415
+        },
+        "outfox/llama13b_chat": {
+          "n": 1000,
+          "mae": 23.279,
+          "exact": 0.058
+        },
+        "outfox/llama70b_chat": {
+          "n": 1000,
+          "mae": 35.155,
+          "exact": 0.088
+        },
+        "outfox/llama7b_chat": {
+          "n": 1000,
+          "mae": 25.722,
+          "exact": 0.073
+        },
+        "peerread/chatgpt": {
+          "n": 1522,
+          "mae": 2.390932982917214,
+          "exact": 0.5348226018396847
+        },
+        "peerread/llama": {
+          "n": 1035,
+          "mae": 38.56811594202899,
+          "exact": 0.2541062801932367
+        },
+        "peerread/llama2_13B_chat": {
+          "n": 1522,
+          "mae": 13.7365308804205,
+          "exact": 0.15177398160315375
+        },
+        "peerread/llama2_70B_chat": {
+          "n": 1522,
+          "mae": 20.699080157687252,
+          "exact": 0.13206307490144548
+        },
+        "peerread/llama2_7B_chat": {
+          "n": 1522,
+          "mae": 16.90275952693824,
+          "exact": 0.1340341655716163
+        }
+      }
+    },
+    "human": {
+      "eval_asap": {
+        "n_docs": 1000,
+        "false_alarm": 0.056,
+        "frac_flagged": 0.017491829009633964
+      },
+      "eval_outfox": {
+        "n_docs": 1000,
+        "false_alarm": 0.16,
+        "frac_flagged": 0.03330827923055665
+      },
+      "eval_twins_peerread": {
+        "n_docs": 747,
+        "false_alarm": 0.049531459170013385,
+        "frac_flagged": 0.010443393387710382
+      },
+      "eval_twins_outfox": {
+        "n_docs": 997,
+        "false_alarm": 0.18254764292878636,
+        "frac_flagged": 0.04530881661136305
+      }
+    },
+    "deployment": {
+      "n_mixed": 11123,
+      "n_human": 2000,
+      "presence_accuracy": 0.8443953364322182,
+      "mixed_detected": 0.8354373309287646,
+      "human_quiet": 0.892,
+      "balanced_accuracy": 0.8637186654643823,
+      "mae_mixed": 19.25505708891486
+    }
+  },
+  "change_point": {
+    "dev": {
+      "n": 505,
+      "mae": 2.285148514851485,
+      "exact": 0.5247524752475248
+    },
+    "test": {
+      "overall": {
+        "n": 11123,
+        "mae": 22.12802301537355,
+        "exact": 0.2078575923761575
+      },
+      "by_domain": {
+        "outfox": {
+          "n": 4000,
+          "mae": 27.31925,
+          "exact": 0.15175
+        },
+        "peerread": {
+          "n": 7123,
+          "mae": 19.212831672048296,
+          "exact": 0.2393654359118349
+        }
+      },
+      "by_generator": {
+        "outfox/gpt4": {
+          "n": 1000,
+          "mae": 6.771,
+          "exact": 0.417
+        },
+        "outfox/llama13b_chat": {
+          "n": 1000,
+          "mae": 25.172,
+          "exact": 0.051
+        },
+        "outfox/llama70b_chat": {
+          "n": 1000,
+          "mae": 46.513,
+          "exact": 0.081
+        },
+        "outfox/llama7b_chat": {
+          "n": 1000,
+          "mae": 30.821,
+          "exact": 0.058
+        },
+        "peerread/chatgpt": {
+          "n": 1522,
+          "mae": 2.3436268068331145,
+          "exact": 0.5348226018396847
+        },
+        "peerread/llama": {
+          "n": 1035,
+          "mae": 48.13623188405797,
+          "exact": 0.242512077294686
+        },
+        "peerread/llama2_13B_chat": {
+          "n": 1522,
+          "mae": 14.348883048620236,
+          "exact": 0.1530880420499343
+        },
+        "peerread/llama2_70B_chat": {
+          "n": 1522,
+          "mae": 22.454664914586072,
+          "exact": 0.13272010512483573
+        },
+        "peerread/llama2_7B_chat": {
+          "n": 1522,
+          "mae": 18.035479632063076,
+          "exact": 0.13469119579500657
+        }
+      }
+    },
+    "human": {
+      "eval_asap": {
+        "n_docs": 1000,
+        "false_alarm": 0.038,
+        "frac_flagged": 0.0167239111701655
+      },
+      "eval_outfox": {
+        "n_docs": 1000,
+        "false_alarm": 0.135,
+        "frac_flagged": 0.03301897015637282
+      },
+      "eval_twins_peerread": {
+        "n_docs": 747,
+        "false_alarm": 0.041499330655957165,
+        "frac_flagged": 0.009249943894318885
+      },
+      "eval_twins_outfox": {
+        "n_docs": 997,
+        "false_alarm": 0.1424272818455366,
+        "frac_flagged": 0.04543598267612344
+      }
+    },
+    "deployment": {
+      "n_mixed": 11123,
+      "n_human": 2000,
+      "presence_accuracy": 0.8355558942315019,
+      "mixed_detected": 0.8211000901713256,
+      "human_quiet": 0.9135,
+      "balanced_accuracy": 0.8673000450856627,
+      "mae_mixed": 22.12802301537355
+    }
+  }
+}
