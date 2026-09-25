@@ -157,6 +157,8 @@ def main() -> None:
                          "pretrained encoder")
     ap.add_argument("--eval-only", metavar="MODEL_DIR",
                     help="skip training; score a saved sentence-head model")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="training seed (default: the config seed)")
     ap.add_argument("--limit", type=int, default=0,
                     help="smoke test: keep only the first N docs per split")
     ap.add_argument("--tag", help="name for this run; sets --save-to, "
@@ -231,7 +233,8 @@ def main() -> None:
         model_name=a.model, epochs=a.epochs, lr=a.lr,
         batch_size=a.batch_size, grad_accum=a.grad_accum,
         max_length=a.max_length, fp16=not a.no_fp16,
-        class_weight=[w_h, w_ai], seed=cfg["seed"],
+        class_weight=[w_h, w_ai],
+        seed=cfg["seed"] if a.seed is None else a.seed,
         use_pair_head=use_pair, pair_loss_weight=a.pair_loss_weight,
         pair_pos_weight=a.pair_pos_weight, feat_map=feat_map,
         margin_weight=a.margin_weight,
@@ -381,6 +384,7 @@ def main() -> None:
 
     payload = {
         "model": a.model, "epochs": a.epochs, "lr": a.lr,
+        "seed": cfg["seed"] if a.seed is None else a.seed,
         "eval_only": a.eval_only, "init_from": a.init_from,
         "twins": {"enabled": a.twins, "margin_weight": a.margin_weight,
                   "consistency_weight": a.consistency_weight,

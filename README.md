@@ -34,16 +34,19 @@ only one that the trivial baselines cannot game.
 | **XLM-RoBERTa tagger** | **0.802** | **0.603** | **0.742** |
 
 On the **all-human twins** of the test documents. The fine-tuned model is
-compared with a control that got the same extra training without twins:
+compared with a control that got the same extra training without twins
+(mean ± std over 3 seeds; the from-scratch model is a single run):
 
 | | XLM-R + 3 epochs (control) | + 3 epochs **with twins** | twins, from scratch |
 |---|---|---|---|
-| human documents with ≥1 sentence flagged | 96.7% | 58.8% | 49.0% |
-| lowest false-alarm rate reachable at any threshold | 95% | 53% | **24%** |
-| exact-boundary F1, mixed documents only (Viterbi) | 0.593 | **0.594** | 0.580 |
-| exact-boundary F1, mixed documents + twins | 0.421 | **0.472** | 0.464 |
+| human documents with ≥1 sentence flagged | 95.4% ± 1.3 | **58.3% ± 1.1** | 49.0% |
+| lowest false-alarm rate reachable at any threshold | 93% ± 2 | 48% ± 6 | **24%** |
+| exact-boundary F1, mixed documents only (Viterbi) | **0.607 ± 0.012** | 0.596 ± 0.002 | 0.580 |
+| exact-boundary F1, mixed documents + twins | 0.430 ± 0.010 | **0.472 ± 0.004** | 0.464 |
 
-Twin-training results are from a single seed. See
+Twin fine-tuning cuts false alarms by 37 points on every seed, for about one
+point of mixed-document accuracy. See
+[reports/detection/twin_ft_seeds.md](reports/detection/twin_ft_seeds.md),
 [reports/detection/twin_tradeoff.md](reports/detection/twin_tradeoff.md) and
 Part 4 of the explainer.
 
@@ -107,6 +110,7 @@ src/
     run_experiments.py      baselines and linear models
     run_transformer.py      XLM-R training and evaluation
     twin_tradeoff.py        threshold sweep across saved models
+    summarize_seeds.py      mean, spread and paired differences across seeds
 tests/                      unit tests
 reports/
   dataset/                  dataset audit
@@ -199,7 +203,14 @@ python src/detect/twin_tradeoff.py base=models/xlmr_tagger \
 ```
 
 `--tag NAME` writes `reports/detection/NAME.{md,json}` and saves the model to
-`models/xlmr_NAME`. `--limit N` runs a quick smoke test on N documents.
+`models/xlmr_NAME`. `--seed N` overrides the config seed, and `--limit N` runs
+a quick smoke test on N documents.
+
+To compare two methods across seeds (runs paired by seed):
+
+```bash
+python src/detect/summarize_seeds.py twin_ft=twin_ft,twin_ft_s43,twin_ft_s44 \n    control=xlmr_ft,xlmr_ft_s43,xlmr_ft_s44 --out reports/detection/twin_ft_seeds
+```
 
 ### 4. Try the detector
 
@@ -251,6 +262,7 @@ One JSON object per document in `generated/combined.jsonl`:
 | [reports/detection/twin_warm.md](reports/detection/twin_warm.md) | twin training with paired terms and warm-up |
 | [reports/detection/twin_ft.md](reports/detection/twin_ft.md) | the trained tagger fine-tuned with twins |
 | [reports/detection/xlmr_ft.md](reports/detection/xlmr_ft.md) | control: the same fine-tuning without twins |
+| [reports/detection/twin_ft_seeds.md](reports/detection/twin_ft_seeds.md) | twin fine-tuning vs control over 3 seeds (runs `*_s43`, `*_s44`) |
 | [reports/detection/twin_no_warmup.md](reports/detection/twin_no_warmup.md) | paired terms from step 0: collapsed (kept as a negative result) |
 | [reports/detection/twin_tradeoff.md](reports/detection/twin_tradeoff.md) | all models across all decision thresholds |
 
@@ -259,5 +271,6 @@ One JSON object per document in `generated/combined.jsonl`:
 Wikipedia is the only domain, and generalisation is measured against a single
 held-out generator. Human sentences carry typographical noise that generator
 output lacks, so part of any detector's score may come from formatting.
-Transformer results are single-seed, and no human-annotation
-ceiling has been established. Part 5 of the explainer discusses each point.
+Twin fine-tuning and its control have three seeds; other transformer results
+are single runs. No human-annotation ceiling has been established. Part 5 of
+the explainer discusses each point.

@@ -1250,6 +1250,9 @@ training stopped, so any gain could simply come from training longer.
 `xlmr_ft` gets the same 3 extra epochs at the same learning rate, on mixed
 documents only.
 
+First run (seed 42; §4.9 repeats it on three seeds and revises part of this
+reading):
+
 | test set | baseline | control `xlmr_ft` | **`twin_ft`** |
 |---|---|---|---|
 | exact-boundary F1, mixed only (Viterbi) | 0.603 | 0.593 | **0.594** |
@@ -1261,11 +1264,11 @@ documents only.
 | exact-boundary F1, mixed + twins | 0.434 | 0.421 | **0.472** |
 | … on the held-out generator | 0.353 | 0.337 | **0.401** |
 
-- **Against the fair control, twin fine-tuning costs nothing on mixed
-  documents** with Viterbi decoding (0.594 vs 0.593), and matches the baseline
-  on the held-out generator. With threshold decoding a small cost remains:
-  its best mixed-only score across thresholds is 0.578, against 0.597 for the
-  control.
+- **On this seed, twin fine-tuning matched the control on mixed documents**
+  with Viterbi decoding (0.594 vs 0.593). Three seeds show that this seed was
+  the favourable one; there is a small cost (§4.9). With threshold decoding the
+  cost was already visible: its best mixed-only score across thresholds is
+  0.578, against 0.597 for the control.
 - **Extra training alone does not help.** The control is slightly *worse* than
   the original baseline, and just as prone to false alarms (96.7%).
 - **It gives the best deployment-view score of any model**: 0.481 exact-boundary
@@ -1275,27 +1278,73 @@ documents only.
   alarms move between 69% and 53%. It cannot reach the 24% of the
   from-scratch model.
 
-So the two variants serve different needs. **Fine-tuning** keeps the
+So the two variants serve different needs. **Fine-tuning** stays close to the
 baseline's accuracy and roughly halves false alarms. **Training from
 scratch** reaches much lower false alarms at a cost of about 5 points.
 
-## 4.9 Where this stands
+## 4.9 Three seeds
+
+`twin_ft` and its control were repeated with seeds 43 and 44 (`--seed`), and
+`src/detect/summarize_seeds.py` compares them
+(`reports/detection/twin_ft_seeds.md`). Runs are **paired by seed**: each
+pair shares its random initialisation of the head and its data order, so
+noise common to both cancels in the difference.
+
+All six runs fine-tune the same trained baseline. The seeds therefore vary the
+fine-tuning, not the baseline's own training. That is enough to test the claim
+being made (twin fine-tuning versus the same amount of ordinary training), but
+it is not a full replication from scratch.
+
+| test set | `twin_ft` | control | paired difference | twin better in |
+|---|---|---|---|---|
+| twin false-alarm rate | 58.3% ± 1.1 | 95.4% ± 1.3 | **−37.1 ± 0.7 pts** | 3/3 seeds |
+| boundaries per twin | 1.60 ± 0.01 | 3.11 ± 0.11 | −1.50 ± 0.10 | 3/3 |
+| sentence FPR on twins | 14.1% ± 0.4 | 26.4% ± 1.6 | −12.3 ± 1.2 pts | 3/3 |
+| exact-boundary F1, mixed + twins | 0.472 ± 0.004 | 0.430 ± 0.010 | **+0.042 ± 0.009** | 3/3 |
+| … on the held-out generator | 0.404 ± 0.003 | 0.348 ± 0.011 | **+0.056 ± 0.008** | 3/3 |
+| exact-boundary F1, mixed only (Viterbi) | 0.596 ± 0.002 | 0.607 ± 0.012 | −0.010 ± 0.010 | 1/3 |
+| … on the held-out generator | 0.554 ± 0.005 | 0.548 ± 0.006 | +0.006 ± 0.007 | 2/3 |
+| exact-boundary F1, mixed only (threshold) | 0.574 ± 0.004 | 0.599 ± 0.010 | −0.025 ± 0.010 | 0/3 |
+| sentence F1 (Viterbi) | 0.791 ± 0.004 | 0.789 ± 0.000 | +0.002 ± 0.004 | 2/3 |
+
+Mean ± sample standard deviation over three seeds.
+
+- **The false-alarm result is robust.** A 37-point reduction with a spread
+  under one point, on every seed, as are the gains in the deployment view (+4.2
+  points overall, +5.6 on the held-out generator).
+- **There is a small mixed-document cost.** About 1 point with Viterbi decoding,
+  which is within about one standard deviation, and about 2.5 points with
+  threshold decoding, which holds on every seed. The seed-42 result in §4.8
+  (0.594 vs 0.593) was the seed on which twin training did best.
+- **No cost on the held-out generator**, where the two are level.
+- **Twin training is more stable.** Its mixed-only exact-boundary F1 varies by
+  ±0.002 across seeds, against ±0.012 for the control.
+
+The threshold sweep (§4.7) over all six models agrees. The lowest false-alarm
+rate reachable at any threshold is **48% ± 6** for `twin_ft` against
+**93% ± 2** for the control. With each model's threshold chosen on dev mixed
+documents plus twins, exact-boundary F1 over mixed documents plus twins is
+0.476 ± 0.006 against 0.440 ± 0.010 (held-out generator: 0.402 ± 0.009
+against 0.358 ± 0.011).
+
+## 4.10 Where this stands
 
 - **Established:** a detector trained only on mixed documents invents
   authorship changes in nearly every human document, and no threshold fixes
   it. More training on mixed documents does not fix it either. The twin-based
   evaluation that shows this costs nothing extra to build.
-- **Strong result:** fine-tuning with twins cuts false alarms from 97% to 59%
-  with no loss of mixed-document accuracy against a matched control.
-- **Promising:** training from scratch with twins reaches a 24% false-alarm
-  rate, at a cost of about 5 points. The consistency term is what matters.
-- **Not yet established:** everything above is one seed. Small gaps
-  (0.594 vs 0.593) cannot be claimed without at least three.
+- **Established (three seeds):** fine-tuning with twins cuts false alarms on
+  human documents from 95% to 58% and improves exact-boundary F1 over mixed
+  plus human documents by 4 points (6 on the unseen generator), for a cost of
+  about 1 point on mixed documents alone (Viterbi decoding).
+- **Promising, single seed:** training from scratch with twins reaches a 24%
+  false-alarm rate, at a cost of about 5 points. The consistency term is what
+  matters.
 
-Next experiments: three seeds of `twin_ft` and its control; drop the margin
-term and vary the consistency weight; fine-tune for longer or at a higher
-consistency weight to push the false-alarm floor lower; select checkpoints on
-dev mixed + twins rather than mixed only.
+Next experiments: drop the margin term and vary the consistency weight;
+fine-tune for longer or at a higher consistency weight to push the
+false-alarm floor lower; seeds for the from-scratch variant; select
+checkpoints on dev mixed + twins rather than mixed only.
 
 ---
 
@@ -1333,7 +1382,9 @@ documents, which cannot see false alarms. The threshold grid in
 are quantified in §4.7, but the reported headline numbers still use the
 original protocol.
 
-**Single seed.** Every transformer result is one training run.
+**Seeds.** Twin fine-tuning and its control have three seeds each (§4.9).
+Every other transformer result, including the baseline and the from-scratch
+twin models, is a single training run.
 
 **Single domain, single held-out generator.** Wikipedia only. Generalisation is
 measured against one unseen model, which cannot separate "generalises to
@@ -1366,9 +1417,10 @@ it is redundant.
 every mixed document has an exactly aligned all-human twin. On those twins the
 baseline flags machine text in 95% of documents, and no threshold brings that
 below 93%. Fine-tuning the baseline on each document together with its twin
-cuts false alarms from 97% to 59% with no loss of mixed-document accuracy
-against a matched control. Training from scratch the same way reaches a 24%
-false-alarm rate, at a cost of about 5 points. Single seed so far.
+cuts false alarms from 95% to 58% across three seeds, against a control given
+the same extra training, for about 1 point of mixed-document accuracy.
+Training from scratch the same way reaches a 24% false-alarm rate, at a cost
+of about 5 points (single seed).
 
 **Five things that were tested and reported as negatives**, because they are as
 useful as the positives: run-length smoothing hurts (Type 3 spans are one
