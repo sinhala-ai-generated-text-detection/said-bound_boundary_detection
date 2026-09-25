@@ -104,13 +104,18 @@ predictable each sentence is. It beats the position-only baseline (0.567) and
 comes close to the full character n-gram model (0.678). That is a striking
 result on its own.
 
-**2. It barely degrades on the unseen generator — a 0.027 gap versus 0.153.**
-This is the most valuable finding in the project. Character n-grams learn
+**2. On the unseen generator, it beats character n-grams without reading any
+text** (0.588 vs 0.571 sentence F1). Character n-grams learn
 *generator-specific habits*: the particular character sequences DeepSeek and
-GPT-4o favour. Those habits do not transfer to Gemini, hence the large gap.
-Likelihood measures something **generator-agnostic** — "is this text
-predictable?" — which is a property of machine-generated text in general, not
-of any one model.
+GPT-4o favour, which do not transfer to Gemini. Likelihood measures something
+closer to **generator-agnostic**: "is this text predictable?"
+
+Its seen-to-held-out gap is also much smaller (0.027 against 0.153), but that
+comparison is confounded: likelihood-only starts from a lower seen score
+(0.615 vs 0.724), so it has less room to drop. The head-to-head score on the
+unseen generator is the fairer evidence. Firmer claims need leave-one-generator-out
+rotation and bootstrap confidence intervals, since one held-out generator is a
+single data point.
 
 **3. Combining them beats either alone**, and lifts held-out F1 from 0.571 to
 **0.615**. That directly attacks the weakness the study exists to measure.

@@ -29,8 +29,9 @@ The task is to recover those boundaries from the text alone.
   all-human twin cuts those false alarms from 95% to **58%**, on every one of three seeds,
   and raises exact-boundary F1 over mixed and human documents by 4 points. The cost is about
   1 point of F1 on mixed documents alone.
-- **Language-model likelihood transfers across generators.** Likelihood features lose only
-  0.027 sentence F1 on the unseen generator, against 0.153 for character n-grams.
+- **Language-model likelihood transfers across generators.** On the unseen generator, a
+  detector given only likelihood features, and no text, beats character n-grams on sentence
+  F1 (0.588 vs 0.571).
 
 ## Results
 
@@ -154,8 +155,9 @@ The source export, the built dataset, model checkpoints and caches are not versi
 ## Reproducing
 
 ```bash
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt   # Windows; use .venv/bin on Linux/macOS
+python -m venv .venv && source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install torch --index-url https://download.pytorch.org/whl/cu130   # the build for your CUDA
+pip install -r requirements.txt
 python -m pytest tests/ -q
 ```
 
@@ -167,7 +169,7 @@ python src/app/serve.py                                                   # demo
 ```
 
 Building the dataset needs the Wikipedia export and an OpenRouter API key (about $27 in API
-cost). Training runs on a single 6 GB GPU. [Reproducing](docs/reproducing.md) has the full run
+cost). Training runs on a single 6 GB laptop GPU or an NVIDIA DGX Spark. [Reproducing](docs/reproducing.md) has the full run
 order and runtimes.
 
 ## Documentation

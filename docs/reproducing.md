@@ -9,26 +9,28 @@ is not versioned, the run order, and how long each stage takes.
 
 ## Environment
 
-All results were produced with:
+Two machines are supported. Results up to the three-seed runs were produced on
+the laptop; the DGX Spark reproduces the baseline to within 0.001 on every
+metric (GPU floating-point differences).
 
-| component | version |
-|---|---|
-| Python | 3.11.9 |
-| PyTorch | 2.6.0 + CUDA 12.4 |
-| Transformers | 5.16.1 |
-| scikit-learn | 1.7.2 |
-| GPU | NVIDIA RTX 4050 Laptop, 6 GB |
-| OS | Windows 11 |
+| component | laptop | DGX Spark |
+|---|---|---|
+| Python | 3.11.9 | 3.12.3 |
+| PyTorch | 2.6.0 + CUDA 12.4 | 2.14.0 + CUDA 13.0 |
+| Transformers | 5.16.1 | 5.16.1 |
+| scikit-learn | 1.7.2 | 1.7.2 |
+| GPU | NVIDIA RTX 4050 Laptop, 6 GB | NVIDIA GB10, 128 GB unified memory |
+| OS | Windows 11 (x86-64) | Ubuntu 24.04 (ARM64) |
+
+Install PyTorch first, as the build that matches the machine's CUDA, then the
+rest:
 
 ```bash
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt       # Windows
-# source .venv/bin/activate && pip install -r requirements.txt   # Linux/macOS
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scriptsctivate
+pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cu130   # DGX Spark
+# pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124  # x86 + CUDA 12.4
+pip install -r requirements.txt
 ```
-
-`torch` is pinned to a CUDA 12.4 build. If pip cannot resolve it, install it
-from the PyTorch index first:
-`pip install torch --index-url https://download.pytorch.org/whl/cu124`.
 
 On Windows, set `PYTHONIOENCODING=utf-8` so Sinhala prints correctly.
 
