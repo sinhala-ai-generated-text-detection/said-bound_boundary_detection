@@ -181,6 +181,10 @@ python src/detect/run_transformer.py --epochs 8 --twins --twin-warmup 2 --tag tw
 python src/detect/run_transformer.py --epochs 8 --twins --tag twin_plain \
     --margin-weight 0 --consistency-weight 0
 
+# fine-tune an already trained tagger with twins
+python src/detect/run_transformer.py --init-from models/xlmr_tagger \
+    --epochs 3 --lr 1e-5 --twins --tag twin_ft
+
 # re-score a saved model (adds twin metrics) without retraining
 python src/detect/run_transformer.py --eval-only models/xlmr_tagger --tag xlmr_rescored
 

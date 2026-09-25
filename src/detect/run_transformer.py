@@ -24,7 +24,8 @@ replaced.
 
 Counterfactual twin training, and its "plain extra negatives" ablation:
 
-    python src/detect/run_transformer.py --epochs 8 --twins --tag twin
+    python src/detect/run_transformer.py --epochs 8 --twins --twin-warmup 2 \\
+        --tag twin_warm
     python src/detect/run_transformer.py --epochs 8 --twins --tag twin_plain \\
         --margin-weight 0 --consistency-weight 0
 
@@ -32,6 +33,11 @@ Re-score a saved model without training (threshold and bias re-tuned on
 dev-seen exactly as after training):
 
     python src/detect/run_transformer.py --eval-only models/xlmr_tagger --tag xlmr_rescored
+
+Continue training a saved tagger, with or without twins:
+
+    python src/detect/run_transformer.py --init-from models/xlmr_tagger \\
+        --epochs 3 --lr 1e-5 --twins --tag twin_ft
 """
 from __future__ import annotations
 
@@ -146,6 +152,9 @@ def main() -> None:
     ap.add_argument("--twin-warmup", type=float, default=0.0,
                     help="epochs of tagging loss only before the paired "
                          "terms ramp in (over one further epoch)")
+    ap.add_argument("--init-from", metavar="MODEL_DIR",
+                    help="start training from a saved tagger instead of the "
+                         "pretrained encoder")
     ap.add_argument("--eval-only", metavar="MODEL_DIR",
                     help="skip training; score a saved sentence-head model")
     ap.add_argument("--limit", type=int, default=0,
@@ -284,7 +293,8 @@ def main() -> None:
               f"({'pair head + viterbi' if use_pair else 'sentence head only'}"
               f"{', counterfactual twins' if a.twins else ''}) ...")
         det.fit(train.docs, dev_docs=dev_seen.docs, eval_fn=dev_probe,
-                twins=tr_twins, twin_weights=tr_weights)
+                twins=tr_twins, twin_weights=tr_weights,
+                init_from=a.init_from)
     train_secs = time.time() - t0
     print(f"training took {train_secs / 60:.1f} min")
 
@@ -371,7 +381,7 @@ def main() -> None:
 
     payload = {
         "model": a.model, "epochs": a.epochs, "lr": a.lr,
-        "eval_only": a.eval_only,
+        "eval_only": a.eval_only, "init_from": a.init_from,
         "twins": {"enabled": a.twins, "margin_weight": a.margin_weight,
                   "consistency_weight": a.consistency_weight,
                   "margin": a.twin_margin, "warmup_epochs": a.twin_warmup},

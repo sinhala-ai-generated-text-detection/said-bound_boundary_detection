@@ -448,7 +448,7 @@ class TransformerDetector:
         return self
 
     def fit(self, docs, dev_docs=None, eval_fn=None, twins=None,
-            twin_weights=None):
+            twin_weights=None, init_from=None):
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -461,6 +461,11 @@ class TransformerDetector:
         self.model = SentenceTagger(
             self.model_name, use_pair_head=self.use_pair_head,
             extra_dim=self.feat_dim).to(self.device)
+        if init_from is not None:
+            # Continue from a trained tagger rather than the pretrained encoder,
+            # e.g. to add twin training without re-learning the task.
+            state = torch.load(Path(init_from) / "model.pt", map_location="cpu")
+            self.model.load_state_dict(state)
 
         if paired:
             loader = self._twin_loader(docs, twins,
