@@ -1237,20 +1237,64 @@ Choosing each model's threshold on dev *mixed documents plus their twins*
 (baseline), 0.465 (twins only) and 0.464 (paired). On the held-out generator:
 0.359, 0.364 and **0.381**.
 
-## 4.8 Where this stands
+## 4.8 Fine-tuning the trained baseline with twins
+
+Training from scratch with twins costs about 5 points of mixed-only accuracy.
+An alternative is to start from the already trained baseline and **fine-tune
+it with twins** (`--init-from models/xlmr_tagger`, 3 epochs, learning rate
+1e-5, same loss, no warm-up needed since the model is already past the
+single-class phase). This is `twin_ft`.
+
+That comparison needs a control. The baseline was still improving when its
+training stopped, so any gain could simply come from training longer.
+`xlmr_ft` gets the same 3 extra epochs at the same learning rate, on mixed
+documents only.
+
+| test set | baseline | control `xlmr_ft` | **`twin_ft`** |
+|---|---|---|---|
+| exact-boundary F1, mixed only (Viterbi) | 0.603 | 0.593 | **0.594** |
+| held-out exact-boundary F1 (Viterbi) | 0.548 | 0.543 | **0.548** |
+| sentence F1 (Viterbi) | 0.792 | 0.789 | **0.794** |
+| twin false-alarm rate (threshold) | 95.3% | 96.7% | **58.8%** |
+| boundaries per twin | 3.07 | 3.16 | **1.61** |
+| sentence FPR on twins | 26.2% | 27.5% | **14.4%** |
+| exact-boundary F1, mixed + twins | 0.434 | 0.421 | **0.472** |
+| … on the held-out generator | 0.353 | 0.337 | **0.401** |
+
+- **Against the fair control, twin fine-tuning costs nothing on mixed
+  documents** with Viterbi decoding (0.594 vs 0.593), and matches the baseline
+  on the held-out generator. With threshold decoding a small cost remains:
+  its best mixed-only score across thresholds is 0.578, against 0.597 for the
+  control.
+- **Extra training alone does not help.** The control is slightly *worse* than
+  the original baseline, and just as prone to false alarms (96.7%).
+- **It gives the best deployment-view score of any model**: 0.481 exact-boundary
+  F1 over mixed documents plus twins at its best dev-selected threshold, and
+  0.408 on the held-out generator.
+- **The trade-off: a narrower range.** Across thresholds, `twin_ft`'s false
+  alarms move between 69% and 53%. It cannot reach the 24% of the
+  from-scratch model.
+
+So the two variants serve different needs. **Fine-tuning** keeps the
+baseline's accuracy and roughly halves false alarms. **Training from
+scratch** reaches much lower false alarms at a cost of about 5 points.
+
+## 4.9 Where this stands
 
 - **Established:** a detector trained only on mixed documents invents
   authorship changes in nearly every human document, and no threshold fixes
-  it. The twin-based evaluation that shows this costs nothing extra to build.
-- **Promising:** paired twin training makes low false-alarm operation
-  possible. The consistency term is what matters.
-- **Not yet solved:** a ~5-point cost in mixed-only exact-boundary F1.
-- **Not yet established:** everything above is one seed. Small gaps (0.465 vs
-  0.464) cannot be claimed without at least three.
+  it. More training on mixed documents does not fix it either. The twin-based
+  evaluation that shows this costs nothing extra to build.
+- **Strong result:** fine-tuning with twins cuts false alarms from 97% to 59%
+  with no loss of mixed-document accuracy against a matched control.
+- **Promising:** training from scratch with twins reaches a 24% false-alarm
+  rate, at a cost of about 5 points. The consistency term is what matters.
+- **Not yet established:** everything above is one seed. Small gaps
+  (0.594 vs 0.593) cannot be claimed without at least three.
 
-Next experiments: fine-tune the trained baseline with twins instead of
-training from scratch (to keep its mixed-document accuracy); drop the margin
-term and vary the consistency weight; run three seeds; select checkpoints on
+Next experiments: three seeds of `twin_ft` and its control; drop the margin
+term and vary the consistency weight; fine-tune for longer or at a higher
+consistency weight to push the false-alarm floor lower; select checkpoints on
 dev mixed + twins rather than mixed only.
 
 ---
@@ -1321,10 +1365,10 @@ it is redundant.
 **Counterfactual twins.** Because construction replaces rather than inserts,
 every mixed document has an exactly aligned all-human twin. On those twins the
 baseline flags machine text in 95% of documents, and no threshold brings that
-below 93%. Training on each document together with its twin, with a
-consistency term, gives the only detector that can operate at a low
-false-alarm rate (down to 24%), at a cost of about 5 points of mixed-only
-exact-boundary F1. Single seed so far.
+below 93%. Fine-tuning the baseline on each document together with its twin
+cuts false alarms from 97% to 59% with no loss of mixed-document accuracy
+against a matched control. Training from scratch the same way reaches a 24%
+false-alarm rate, at a cost of about 5 points. Single seed so far.
 
 **Five things that were tested and reported as negatives**, because they are as
 useful as the positives: run-length smoothing hurts (Type 3 spans are one

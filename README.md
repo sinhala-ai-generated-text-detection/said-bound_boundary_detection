@@ -33,13 +33,15 @@ only one that the trivial baselines cannot game.
 | linear + likelihood features | 0.704 | 0.450 | 0.615 |
 | **XLM-RoBERTa tagger** | **0.802** | **0.603** | **0.742** |
 
-On the **all-human twins** of the test documents:
+On the **all-human twins** of the test documents. The fine-tuned model is
+compared with a control that got the same extra training without twins:
 
-| | baseline XLM-R | + twin training |
-|---|---|---|
-| human documents with ≥1 sentence flagged | 95.3% | 49.0% |
-| lowest false-alarm rate reachable at any threshold | 93% | **24%** |
-| best mixed-only exact-boundary F1 at any threshold | **0.603** | 0.554 |
+| | XLM-R + 3 epochs (control) | + 3 epochs **with twins** | twins, from scratch |
+|---|---|---|---|
+| human documents with ≥1 sentence flagged | 96.7% | 58.8% | 49.0% |
+| lowest false-alarm rate reachable at any threshold | 95% | 53% | **24%** |
+| exact-boundary F1, mixed documents only (Viterbi) | 0.593 | **0.594** | 0.580 |
+| exact-boundary F1, mixed documents + twins | 0.421 | **0.472** | 0.464 |
 
 Twin-training results are from a single seed. See
 [reports/detection/twin_tradeoff.md](reports/detection/twin_tradeoff.md) and
@@ -193,7 +195,7 @@ python src/detect/run_transformer.py --eval-only models/xlmr_tagger --tag xlmr_r
 
 # compare saved models across all decision thresholds
 python src/detect/twin_tradeoff.py base=models/xlmr_tagger \
-    twin_plain=models/xlmr_twin_plain twin_warm=models/xlmr_twin_warm
+    twin_plain=models/xlmr_twin_plain twin_warm=models/xlmr_twin_warm twin_ft=models/xlmr_twin_ft
 ```
 
 `--tag NAME` writes `reports/detection/NAME.{md,json}` and saves the model to
@@ -247,6 +249,8 @@ One JSON object per document in `generated/combined.jsonl`:
 | [reports/detection/xlmr_rescored.md](reports/detection/xlmr_rescored.md) | XLM-R re-scored with twin metrics |
 | [reports/detection/twin_plain.md](reports/detection/twin_plain.md) | twins as extra human documents |
 | [reports/detection/twin_warm.md](reports/detection/twin_warm.md) | twin training with paired terms and warm-up |
+| [reports/detection/twin_ft.md](reports/detection/twin_ft.md) | the trained tagger fine-tuned with twins |
+| [reports/detection/xlmr_ft.md](reports/detection/xlmr_ft.md) | control: the same fine-tuning without twins |
 | [reports/detection/twin_no_warmup.md](reports/detection/twin_no_warmup.md) | paired terms from step 0: collapsed (kept as a negative result) |
 | [reports/detection/twin_tradeoff.md](reports/detection/twin_tradeoff.md) | all models across all decision thresholds |
 

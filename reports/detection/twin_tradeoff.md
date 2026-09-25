@@ -10,10 +10,14 @@ Every model's decision threshold is swept over 0.05-0.95 (threshold decoding). *
 |---|---|---|---|---|---|---|---|---|
 | base | mixed-only | 0.950 | 0.600 | 0.555 | 0.931 | 2.88 | 0.438 | 0.359 |
 | base | deployment | 0.950 | 0.600 | 0.555 | 0.931 | 2.88 | 0.438 | 0.359 |
+| base_ft | mixed-only | 0.900 | 0.592 | 0.538 | 0.955 | 3.05 | 0.427 | 0.344 |
+| base_ft | deployment | 0.925 | 0.595 | 0.543 | 0.950 | 3.01 | 0.430 | 0.348 |
 | twin_plain | mixed-only | 0.050 | 0.548 | 0.480 | 0.630 | 1.93 | 0.436 | 0.349 |
 | twin_plain | deployment | 0.925 | 0.545 | 0.450 | 0.453 | 1.20 | 0.465 | 0.364 |
 | twin_warm | mixed-only | 0.650 | 0.543 | 0.475 | 0.490 | 1.19 | 0.464 | 0.381 |
 | twin_warm | deployment | 0.650 | 0.543 | 0.475 | 0.490 | 1.19 | 0.464 | 0.381 |
+| twin_ft | mixed-only | 0.900 | 0.574 | 0.522 | 0.561 | 1.50 | 0.477 | 0.403 |
+| twin_ft | deployment | 0.925 | 0.577 | 0.525 | 0.545 | 1.46 | 0.481 | 0.408 |
 
 ## Mixed-document accuracy at matched false-alarm rates
 
@@ -22,5 +26,7 @@ Best test mixed exact-boundary F1 among thresholds whose twin false-alarm rate i
 | model | alarm <= 0.3 | alarm <= 0.5 | alarm <= 0.7 |
 |---|---|---|---|
 | base | unreachable | unreachable | unreachable |
+| base_ft | unreachable | unreachable | unreachable |
 | twin_plain | unreachable | 0.550 (thr 0.80) | 0.554 (thr 0.33) |
 | twin_warm | 0.502 (thr 0.93) | 0.543 (thr 0.65) | 0.554 (thr 0.40) |
+| twin_ft | unreachable | unreachable | 0.578 (thr 0.53) |
