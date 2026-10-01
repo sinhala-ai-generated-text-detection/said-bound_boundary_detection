@@ -15,3 +15,6 @@ models/
 
 # Third-party English replication data (see docs/english-replication.md)
 data/
+
+# Hugging Face release build (src/dataset/export_huggingface.py)
+hf_release/

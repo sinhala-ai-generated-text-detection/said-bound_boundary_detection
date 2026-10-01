@@ -54,6 +54,7 @@ needs no API access.
 | | `models/`: fine-tuned checkpoints (1.1 GB each) |
 | | `cache/`: likelihood features |
 | | `data/english/`: third-party English replication data, predictions |
+| | `hf_release/`: the Hugging Face release build |
 
 The splits are versioned so that anyone rebuilding the dataset gets the same
 partition of source articles.
@@ -237,6 +238,33 @@ python src/replication/semeval_c/sweep.py \
 Each run writes `results/replication/semeval_c/<tag>.{md,json}` and its word
 probabilities to `data/english/preds/<tag>.pkl`, which the sweep reads; no
 model checkpoint is kept.
+
+### 7. Publishing the dataset
+
+The released dataset,
+[`said-sinhala-ai-dataset/said-bound`](https://huggingface.co/datasets/said-sinhala-ai-dataset/said-bound),
+is exported from `generated/combined.jsonl`, `sources/windows.jsonl` and
+`splits/`. The export checks every all-human twin against its mixed documents
+before writing it, and prints the statistics quoted in the dataset card.
+
+```bash
+python src/dataset/export_huggingface.py          # -> hf_release/said-bound/data/, prompts/
+hf auth login                                      # a token with write access to the organisation
+hf upload said-sinhala-ai-dataset/said-bound hf_release/said-bound . --repo-type dataset
+```
+
+The dataset card (`README.md`), `LICENSE` and `CITATION.bib` in
+`hf_release/said-bound/` are maintained by hand. `hf_release/` is gitignored.
+
+| config | contents |
+|---|---|
+| `default` | all mixed documents (`continuation`, `internal_span` and `multiple_spans` are per-type subsets) |
+| `human_originals` | the all-human twin of every window, with the ids of the mixed documents built from it |
+| `unrelated_human` | human windows from articles that no mixed document uses |
+
+The splits are named `train`, `validation` and `test` on the Hub (`dev` here),
+and generators are named as in the companion dataset `said-hat` (`gpt-4o`,
+`deepseek-v3`, `gemini-2.5-pro`).
 
 ## Runtimes and cost
 

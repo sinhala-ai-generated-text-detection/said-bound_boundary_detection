@@ -7,12 +7,16 @@ fine-tuned XLM-RoBERTa tagger, and counterfactual-twin training for purely human
 [![Python](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](docs/reproducing.md#environment)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.6%20·%20CUDA%2012.4-EE4C2C?logo=pytorch&logoColor=white)](docs/reproducing.md#environment)
 [![Transformers](https://img.shields.io/badge/transformers-5.16-FFD21E)](docs/reproducing.md#environment)
-[![Tests](https://img.shields.io/badge/tests-139%20passing-1baf7a)](tests/)
+[![Tests](https://img.shields.io/badge/tests-147%20passing-1baf7a)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Dataset on Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20dataset-said--bound-FFD21E)](https://huggingface.co/datasets/said-sinhala-ai-dataset/said-bound)
 
 Every document mixes human sentences with sentences written by a large language model. Each
 sentence is labelled human or machine, and a **boundary** is any point where the label changes.
 The task is to recover those boundaries from the text alone.
+
+The dataset is released as **Sinhala-BOUND**, the boundary-detection subset of
+[SAID](https://huggingface.co/said-sinhala-ai-dataset) (Sinhala AI-text Identification Dataset).
 
 ## Key findings
 
@@ -140,6 +144,18 @@ Splits are assigned over source articles before any generation, so no human pass
 more than one split. Seven automatic checks gate every generation; failures are regenerated,
 never hand-edited. See [Dataset construction](docs/dataset.md).
 
+The dataset is on the Hugging Face Hub as
+[`said-sinhala-ai-dataset/said-bound`](https://huggingface.co/datasets/said-sinhala-ai-dataset/said-bound),
+with the mixed documents, each document's all-human twin, and unrelated human documents for
+false-alarm testing:
+
+```python
+from datasets import load_dataset
+
+bound = load_dataset("said-sinhala-ai-dataset/said-bound")                     # mixed documents
+twins = load_dataset("said-sinhala-ai-dataset/said-bound", "human_originals")  # all-human twins
+```
+
 ## Study design
 
 ```mermaid
@@ -161,7 +177,7 @@ development data restricted to seen generators, and report on test overall, seen
 ```
 .
 ├── src/
-│   ├── dataset/            # cleaning, segmentation, windowing, splits, generation, validation
+│   ├── dataset/            # cleaning, segmentation, windowing, splits, generation, validation, Hub export
 │   ├── detect/             # baselines, linear, likelihood, XLM-R tagger, twin training and analysis
 │   ├── replication/        # English replication on SemEval-2024 Task 8 Subtask C
 │   ├── app/serve.py        # local web demo of the tagger
@@ -178,7 +194,7 @@ development data restricted to seen generators, and report on test overall, seen
 ├── docs/                   # methodology pages
 │   ├── assets/             #   figures (light and dark)
 │   └── scripts/make_figures.py  # regenerates every figure from results/
-├── tests/                  # 139 unit tests
+├── tests/                  # 147 unit tests
 ├── splits/                 # train/dev/test source-article ids
 ├── prompts/                # Sinhala prompt templates
 ├── config.yaml             # every tunable setting
@@ -236,5 +252,7 @@ order and runtimes.
 
 The code in this repository is released under the [MIT License](LICENSE).
 
-The Sinhala Wikipedia text it builds on is licensed CC BY-SA 4.0 and is not redistributed here;
-neither is the generated dataset.
+The Sinhala Wikipedia text it builds on is licensed CC BY-SA 4.0 and is not redistributed in
+this repository. The generated dataset is released separately on the
+[Hugging Face Hub](https://huggingface.co/datasets/said-sinhala-ai-dataset/said-bound) under
+CC BY-SA 4.0.
